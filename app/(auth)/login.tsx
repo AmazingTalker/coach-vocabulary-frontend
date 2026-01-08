@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   StyleSheet,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,6 +23,11 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+
+  // 寬螢幕時使用較窄的內容寬度
+  const isWideScreen = width > 600;
+  const contentMaxWidth = isWideScreen ? 400 : undefined;
 
   const handleLogin = async () => {
     const trimmedUsername = username.trim();
@@ -55,7 +61,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex1}
       >
-        <View style={styles.content}>
+        <View style={[styles.content, contentMaxWidth ? { maxWidth: contentMaxWidth } : null]}>
           {/* Logo & Title */}
           <View style={styles.logoContainer}>
             <View style={styles.logoCircle}>

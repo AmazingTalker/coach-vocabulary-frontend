@@ -7,6 +7,7 @@ import {
   Alert,
   Image,
   StyleSheet,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,6 +28,11 @@ const COUNTDOWN_INTERVAL = 50; // 更新間隔 50ms 以實現平滑倒數
 export default function LearnScreen() {
   const router = useRouter();
   const { speak, isSpeaking } = useSpeech();
+  const { width } = useWindowDimensions();
+
+  // 寬螢幕時使用較窄的內容寬度
+  const isWideScreen = width > 600;
+  const contentMaxWidth = isWideScreen ? 480 : undefined;
 
   const [session, setSession] = useState<LearnSessionResponse | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -247,7 +253,7 @@ export default function LearnScreen() {
       </View>
 
       {/* Content */}
-      <View style={styles.content}>
+      <View style={[styles.content, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
         {phase === "display" && currentWord && (
           <View style={styles.displayContent}>
             {/* 倒數計時 */}

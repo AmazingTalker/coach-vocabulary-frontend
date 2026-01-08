@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,21 +7,31 @@ import {
   Alert,
   Image,
   StyleSheet,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
 import { handleApiError, getAssetUrl } from "../../services/api";
-import type { PracticeSessionResponse, ExerciseWithWordSchema, AnswerSchema } from "../../types/api";
-import { ArrowLeft, Check, X, Volume2, Mic } from "lucide-react-native";
+import type { PracticeSessionResponse, AnswerSchema } from "../../types/api";
+import { ArrowLeft, Check, X, Volume2 } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
 import { colors } from "../../lib/tw";
+import { CountdownText } from "../../components/ui/CountdownText";
 
 type Phase = "loading" | "intro" | "exercise" | "result" | "complete";
+
+const EXERCISE_DURATION = 5000; // 答題時間 5 秒
+const COUNTDOWN_INTERVAL = 50; // 更新間隔 50ms
 
 export default function PracticeScreen() {
   const router = useRouter();
   const { speak, isSpeaking } = useSpeech();
+  const { width } = useWindowDimensions();
+
+  // 寬螢幕時使用較窄的內容寬度
+  const isWideScreen = width > 600;
+  const contentMaxWidth = isWideScreen ? 480 : undefined;
 
   const [session, setSession] = useState<PracticeSessionResponse | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -29,10 +39,21 @@ export default function PracticeScreen() {
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
   const [answers, setAnswers] = useState<AnswerSchema[]>([]);
   const [currentExerciseType, setCurrentExerciseType] = useState<string>("");
+  const [remainingMs, setRemainingMs] = useState(EXERCISE_DURATION);
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const exercises = session?.exercises || [];
   const currentExercise = exercises[currentIndex];
   const totalExercises = exercises.length;
+
+  // 清理計時器
+  const clearTimers = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
 
   // 載入練習 Session
   useEffect(() => {
@@ -59,6 +80,8 @@ export default function PracticeScreen() {
       }
     };
     loadSession();
+
+    return () => clearTimers();
   }, [router]);
 
   // 播放聽力題
@@ -67,6 +90,43 @@ export default function PracticeScreen() {
       speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
     }
   }, [phase, currentIndex, currentExercise, speak]);
+
+  // 練習階段倒數計時（僅閱讀和聽力題）
+  useEffect(() => {
+    if (phase === "exercise" && currentExercise && !currentExercise.type.startsWith("speaking")) {
+      const start = Date.now();
+      setRemainingMs(EXERCISE_DURATION);
+
+      timerRef.current = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, EXERCISE_DURATION - elapsed);
+        setRemainingMs(remaining);
+
+        if (remaining <= 0) {
+          clearTimers();
+          handleTimeout();
+        }
+      }, COUNTDOWN_INTERVAL);
+    }
+
+    return () => clearTimers();
+  }, [phase, currentIndex]);
+
+  // 超時處理
+  const handleTimeout = () => {
+    if (selectedOptionIndex !== null) return;
+
+    setSelectedOptionIndex(-1);
+    setAnswers((prev) => [
+      ...prev,
+      { word_id: currentExercise!.word_id, correct: false },
+    ]);
+    setPhase("result");
+
+    setTimeout(() => {
+      goToNextExercise();
+    }, 1500);
+  };
 
   const getExerciseCategory = (type: string): string => {
     if (type.startsWith("reading")) return "reading";
@@ -87,14 +147,21 @@ export default function PracticeScreen() {
     }
   };
 
+  const getPoolLabel = (pool: string): string => {
+    if (pool.startsWith("P")) {
+      return `練習池 ${pool}`;
+    }
+    return `複習池 ${pool}`;
+  };
+
   // 處理選項點擊
   const handleOptionSelect = (index: number) => {
     if (selectedOptionIndex !== null) return;
 
+    clearTimers();
     setSelectedOptionIndex(index);
     const correct = index === currentExercise?.correct_index;
 
-    // 記錄答案
     setAnswers((prev) => [
       ...prev,
       { word_id: currentExercise!.word_id, correct },
@@ -102,7 +169,6 @@ export default function PracticeScreen() {
 
     setPhase("result");
 
-    // 1.5 秒後進入下一題
     setTimeout(() => {
       goToNextExercise();
     }, 1500);
@@ -126,7 +192,6 @@ export default function PracticeScreen() {
       const nextExercise = exercises[currentIndex + 1];
       const nextCategory = getExerciseCategory(nextExercise.type);
 
-      // 如果題型變了，顯示介紹
       if (nextCategory !== currentExerciseType) {
         setCurrentExerciseType(nextCategory);
         setPhase("intro");
@@ -137,7 +202,6 @@ export default function PracticeScreen() {
       setCurrentIndex((prev) => prev + 1);
       setSelectedOptionIndex(null);
     } else {
-      // 完成所有練習
       completeSession();
     }
   };
@@ -155,6 +219,7 @@ export default function PracticeScreen() {
 
   // 返回
   const handleBack = () => {
+    clearTimers();
     Alert.alert("確定離開？", "練習進度將不會保存", [
       { text: "取消", style: "cancel" },
       { text: "離開", style: "destructive", onPress: () => router.back() },
@@ -257,9 +322,26 @@ export default function PracticeScreen() {
       </View>
 
       {/* Content */}
-      <View style={styles.contentContainer}>
+      <View style={[styles.contentContainer, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
         {currentExercise && (
           <View style={styles.exerciseContainer}>
+            {/* Pool 標籤 */}
+            <View style={styles.poolBadge}>
+              <Text style={styles.poolBadgeText}>
+                {getPoolLabel(currentExercise.pool)}
+              </Text>
+            </View>
+
+            {/* 倒數計時（僅閱讀和聽力題，且在答題階段） */}
+            {phase === "exercise" && !currentExercise.type.startsWith("speaking") && (
+              <CountdownText remainingMs={remainingMs} />
+            )}
+
+            {/* 超時提示 */}
+            {phase === "result" && selectedOptionIndex === -1 && (
+              <Text style={styles.timeoutText}>時間到！</Text>
+            )}
+
             {/* 題目區 */}
             {currentExercise.type.startsWith("reading") && (
               <>
@@ -540,6 +622,28 @@ const styles = StyleSheet.create({
   exerciseContainer: {
     width: "100%",
     alignItems: "center",
+  },
+
+  // Pool badge
+  poolBadge: {
+    backgroundColor: `${colors.accent}1A`,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    marginBottom: 16,
+  },
+  poolBadgeText: {
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: "600",
+  },
+
+  // Timeout text
+  timeoutText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: colors.destructive,
+    marginBottom: 16,
   },
 
   // Reading exercise

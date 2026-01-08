@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,21 +7,32 @@ import {
   Alert,
   Image,
   StyleSheet,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { reviewService } from "../../services/reviewService";
 import { handleApiError, getAssetUrl } from "../../services/api";
-import type { ReviewSessionResponse, WordDetailSchema, AnswerSchema } from "../../types/api";
+import type { ReviewSessionResponse, AnswerSchema } from "../../types/api";
 import { ArrowLeft, Check, X, Volume2 } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
 import { colors } from "../../lib/tw";
+import { CountdownText } from "../../components/ui/CountdownText";
 
 type Phase = "loading" | "display" | "exercise" | "result" | "complete";
+
+const DISPLAY_DURATION = 3000; // 展示階段 3 秒
+const EXERCISE_DURATION = 3000; // 答題時間 3 秒
+const COUNTDOWN_INTERVAL = 50; // 更新間隔 50ms
 
 export default function ReviewScreen() {
   const router = useRouter();
   const { speak, isSpeaking } = useSpeech();
+  const { width } = useWindowDimensions();
+
+  // 寬螢幕時使用較窄的內容寬度
+  const isWideScreen = width > 600;
+  const contentMaxWidth = isWideScreen ? 480 : undefined;
 
   const [session, setSession] = useState<ReviewSessionResponse | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -29,12 +40,23 @@ export default function ReviewScreen() {
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
   const [answers, setAnswers] = useState<AnswerSchema[]>([]);
   const [displayCompleted, setDisplayCompleted] = useState(false);
+  const [remainingMs, setRemainingMs] = useState(EXERCISE_DURATION);
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const words = session?.words || [];
   const exercises = session?.exercises || [];
   const currentWord = words[currentIndex];
   const currentExercise = exercises[currentIndex];
   const totalWords = words.length;
+
+  // 清理計時器
+  const clearTimers = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
 
   // 載入複習 Session
   useEffect(() => {
@@ -56,14 +78,76 @@ export default function ReviewScreen() {
       }
     };
     loadSession();
+
+    return () => clearTimers();
   }, [router]);
 
-  // 自動播放發音
+  // 展示階段：自動播放發音 + 3秒後自動進入練習
   useEffect(() => {
     if (phase === "display" && currentWord) {
+      // 播放音檔
       speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+
+      // 重置倒數
+      const start = Date.now();
+      setRemainingMs(DISPLAY_DURATION);
+
+      // 設定倒數計時器
+      timerRef.current = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
+        setRemainingMs(remaining);
+
+        if (remaining <= 0) {
+          clearTimers();
+          goToExercise();
+        }
+      }, COUNTDOWN_INTERVAL);
     }
+
+    return () => clearTimers();
   }, [phase, currentIndex, currentWord, speak]);
+
+  // 練習階段倒數計時
+  useEffect(() => {
+    if (phase === "exercise" && currentExercise) {
+      const start = Date.now();
+      setRemainingMs(EXERCISE_DURATION);
+
+      timerRef.current = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, EXERCISE_DURATION - elapsed);
+        setRemainingMs(remaining);
+
+        if (remaining <= 0) {
+          clearTimers();
+          handleTimeout();
+        }
+      }, COUNTDOWN_INTERVAL);
+    }
+
+    return () => clearTimers();
+  }, [phase, currentIndex]);
+
+  // 超時處理
+  const handleTimeout = () => {
+    if (selectedOptionIndex !== null) return;
+
+    setSelectedOptionIndex(-1);
+    setAnswers((prev) => [
+      ...prev,
+      { word_id: currentWord!.id, correct: false },
+    ]);
+    setPhase("result");
+
+    setTimeout(() => {
+      goToNext();
+    }, 1500);
+  };
+
+  const getPoolLabel = (pool: string): string => {
+    return `複習池 ${pool}`;
+  };
 
   // 進入練習階段
   const goToExercise = async () => {
@@ -86,6 +170,7 @@ export default function ReviewScreen() {
   const handleOptionSelect = (index: number) => {
     if (selectedOptionIndex !== null) return;
 
+    clearTimers();
     setSelectedOptionIndex(index);
     const correct = index === currentExercise?.correct_index;
 
@@ -97,13 +182,19 @@ export default function ReviewScreen() {
     setPhase("result");
 
     setTimeout(() => {
-      if (currentIndex < totalWords - 1) {
-        setCurrentIndex((prev) => prev + 1);
-        setPhase("display");
-      } else {
-        completeSession();
-      }
+      goToNext();
     }, 1500);
+  };
+
+  // 進入下一題
+  const goToNext = () => {
+    if (currentIndex < totalWords - 1) {
+      setCurrentIndex((prev) => prev + 1);
+      setPhase("display");
+      setSelectedOptionIndex(null);
+    } else {
+      completeSession();
+    }
   };
 
   // 完成複習
@@ -119,6 +210,7 @@ export default function ReviewScreen() {
 
   // 返回
   const handleBack = () => {
+    clearTimers();
     Alert.alert("確定離開？", "複習進度將不會保存", [
       { text: "取消", style: "cancel" },
       { text: "離開", style: "destructive", onPress: () => router.back() },
@@ -198,9 +290,19 @@ export default function ReviewScreen() {
       </View>
 
       {/* Content */}
-      <View style={styles.contentContainer}>
+      <View style={[styles.contentContainer, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
         {phase === "display" && currentWord && (
           <View style={styles.displayContainer}>
+            {/* 倒數計時 */}
+            <CountdownText remainingMs={remainingMs} />
+
+            {/* Pool 標籤 */}
+            <View style={styles.poolBadge}>
+              <Text style={styles.poolBadgeText}>
+                {getPoolLabel(currentWord.pool)}
+              </Text>
+            </View>
+
             {currentWord.image_url && (
               <Image
                 source={{ uri: getAssetUrl(currentWord.image_url) || undefined }}
@@ -215,17 +317,6 @@ export default function ReviewScreen() {
               {currentWord.translation}
             </Text>
 
-            {currentWord.sentence && (
-              <View style={styles.sentenceContainer}>
-                <Text style={styles.sentenceText}>
-                  {currentWord.sentence}
-                </Text>
-                <Text style={styles.sentenceZhText}>
-                  {currentWord.sentence_zh}
-                </Text>
-              </View>
-            )}
-
             <View style={styles.speakerContainer}>
               <Volume2
                 size={24}
@@ -235,20 +326,28 @@ export default function ReviewScreen() {
                 {isSpeaking ? "播放中..." : "已播放"}
               </Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={goToExercise}
-            >
-              <Text style={styles.primaryButtonText}>
-                開始測驗
-              </Text>
-            </TouchableOpacity>
           </View>
         )}
 
         {(phase === "exercise" || phase === "result") && currentExercise && currentWord && (
           <View style={styles.exerciseContainer}>
+            {/* Pool 標籤 */}
+            <View style={styles.poolBadge}>
+              <Text style={styles.poolBadgeText}>
+                {getPoolLabel(currentWord.pool)}
+              </Text>
+            </View>
+
+            {/* 倒數計時（僅在答題階段） */}
+            {phase === "exercise" && (
+              <CountdownText remainingMs={remainingMs} />
+            )}
+
+            {/* 超時提示 */}
+            {phase === "result" && selectedOptionIndex === -1 && (
+              <Text style={styles.timeoutText}>時間到！</Text>
+            )}
+
             <Text style={styles.exerciseWordText}>
               {currentWord.word}
             </Text>
@@ -412,6 +511,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 
+  // Pool badge
+  poolBadge: {
+    backgroundColor: `${colors.accent}1A`,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    marginBottom: 16,
+  },
+  poolBadgeText: {
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: "600",
+  },
+
+  // Timeout text
+  timeoutText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: colors.destructive,
+    marginBottom: 16,
+  },
+
   // Display phase
   displayContainer: {
     alignItems: "center",
@@ -433,22 +554,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: colors.mutedForeground,
     marginBottom: 16,
-  },
-  sentenceContainer: {
-    backgroundColor: `${colors.muted}80`,
-    borderRadius: 12,
-    padding: 16,
-    width: "100%",
-    marginBottom: 24,
-  },
-  sentenceText: {
-    fontSize: 16,
-    color: colors.foreground,
-    marginBottom: 4,
-  },
-  sentenceZhText: {
-    fontSize: 14,
-    color: colors.mutedForeground,
   },
   speakerContainer: {
     flexDirection: "row",
