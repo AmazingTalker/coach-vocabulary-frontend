@@ -4,6 +4,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // API Base URL - 可以透過環境變數覆蓋
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
+// AsyncStorage Keys
+export const STORAGE_KEYS = {
+  ACCESS_TOKEN: "accessToken",
+  USER: "user",
+} as const;
+
 // 建立 Axios 實例
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -13,17 +19,17 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
-// 請求攔截器 - 自動加入 X-User-Id
+// 請求攔截器 - 自動加入 Bearer Token
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     try {
-      const userId = await AsyncStorage.getItem("userId");
-      if (userId && config.headers) {
-        config.headers["X-User-Id"] = userId;
+      const token = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      if (token && config.headers) {
+        config.headers["Authorization"] = `Bearer ${token}`;
       }
     } catch (error) {
       // AsyncStorage 錯誤不應阻止請求
-      console.warn("Failed to get userId from storage:", error);
+      console.warn("Failed to get token from storage:", error);
     }
     return config;
   },
@@ -40,11 +46,11 @@ api.interceptors.response.use(
       // 記錄錯誤詳情
       console.error(`API Error [${status}]:`, data);
 
-      // 401/403 表示認證問題
-      if (status === 401 || status === 403) {
+      // 401 表示認證問題（token 無效或過期）
+      if (status === 401) {
         // 清除本地儲存的認證資訊
-        AsyncStorage.removeItem("userId").catch(console.error);
-        AsyncStorage.removeItem("username").catch(console.error);
+        AsyncStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN).catch(console.error);
+        AsyncStorage.removeItem(STORAGE_KEYS.USER).catch(console.error);
       }
     } else if (error.request) {
       console.error("Network error - no response received:", error.message);

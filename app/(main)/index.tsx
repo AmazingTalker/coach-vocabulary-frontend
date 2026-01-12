@@ -35,7 +35,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const { username, logout } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const { width } = useWindowDimensions();
 
@@ -208,7 +208,7 @@ export default function HomeScreen() {
                 Coach Vocabulary
               </Text>
               <Text style={styles.headerSubtitle}>
-                歡迎回來，{username}
+                歡迎回來，{user?.username}
               </Text>
             </View>
             <TouchableOpacity

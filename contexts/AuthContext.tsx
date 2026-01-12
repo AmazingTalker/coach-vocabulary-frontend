@@ -1,31 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authService } from "../services/authService";
+import { STORAGE_KEYS } from "../services/api";
+import type { UserInfo } from "../types/api";
 
 interface AuthState {
   isAuthenticated: boolean;
-  userId: string | null;
-  username: string | null;
+  user: UserInfo | null;
   isLoading: boolean;
 }
 
 interface AuthContextType extends AuthState {
-  login: (username: string) => Promise<void>;
+  register: (email: string, username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEYS = {
-  USER_ID: "userId",
-  USERNAME: "username",
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     isAuthenticated: false,
-    userId: null,
-    username: null,
+    user: null,
     isLoading: true,
   });
 
@@ -33,16 +29,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadStoredAuth = async () => {
       try {
-        const userId = await AsyncStorage.getItem(STORAGE_KEYS.USER_ID);
-        const username = await AsyncStorage.getItem(STORAGE_KEYS.USERNAME);
+        const token = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+        const userJson = await AsyncStorage.getItem(STORAGE_KEYS.USER);
 
-        if (userId && username) {
-          setState({
-            isAuthenticated: true,
-            userId,
-            username,
-            isLoading: false,
-          });
+        if (token && userJson) {
+          // 嘗試驗證 token 有效性
+          try {
+            const user = await authService.getMe();
+            // 更新本地儲存的用戶資訊（以防有變更）
+            await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+            setState({
+              isAuthenticated: true,
+              user,
+              isLoading: false,
+            });
+          } catch {
+            // Token 無效，清除本地儲存
+            await AsyncStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+            await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+            setState({
+              isAuthenticated: false,
+              user: null,
+              isLoading: false,
+            });
+          }
         } else {
           setState((prev) => ({ ...prev, isLoading: false }));
         }
@@ -55,19 +65,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadStoredAuth();
   }, []);
 
-  const login = async (username: string) => {
+  // 共用的認證資料儲存邏輯
+  const saveAuthData = async (response: {
+    access_token: string;
+    id: string;
+    email: string;
+    username: string;
+  }) => {
+    await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, response.access_token);
+    const user: UserInfo = {
+      id: response.id,
+      email: response.email,
+      username: response.username,
+    };
+    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+
+    setState({
+      isAuthenticated: true,
+      user,
+      isLoading: false,
+    });
+  };
+
+  const register = async (email: string, username: string, password: string) => {
     try {
-      const response = await authService.login(username);
+      const response = await authService.register(email, username, password);
+      await saveAuthData(response);
+    } catch (error) {
+      console.error("Register failed:", error);
+      throw error;
+    }
+  };
 
-      await AsyncStorage.setItem(STORAGE_KEYS.USER_ID, response.id);
-      await AsyncStorage.setItem(STORAGE_KEYS.USERNAME, response.username);
-
-      setState({
-        isAuthenticated: true,
-        userId: response.id,
-        username: response.username,
-        isLoading: false,
-      });
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await authService.login(email, password);
+      await saveAuthData(response);
     } catch (error) {
       console.error("Login failed:", error);
       throw error;
@@ -76,13 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.USER_ID);
-      await AsyncStorage.removeItem(STORAGE_KEYS.USERNAME);
+      await AsyncStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+      await AsyncStorage.removeItem(STORAGE_KEYS.USER);
 
       setState({
         isAuthenticated: false,
-        userId: null,
-        username: null,
+        user: null,
         isLoading: false,
       });
     } catch (error) {
@@ -92,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, register, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,13 +1,27 @@
 // === Auth ===
-export interface LoginRequest {
+export interface RegisterRequest {
+  email: string;
   username: string;
+  password: string;
 }
 
-export interface LoginResponse {
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
   id: string;
+  email: string;
   username: string;
-  created_at: string;
-  is_new_user: boolean;
+  access_token: string;
+  token_type: string;
+}
+
+export interface UserInfo {
+  id: string;
+  email: string;
+  username: string;
 }
 
 // === Home ===
