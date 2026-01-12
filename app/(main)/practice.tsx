@@ -14,10 +14,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
 import { handleApiError, getAssetUrl } from "../../services/api";
 import type { PracticeSessionResponse, AnswerSchema } from "../../types/api";
-import { ArrowLeft, Check, X, Volume2 } from "lucide-react-native";
+import { Volume2, Check } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
 import { colors } from "../../lib/tw";
 import { CountdownText } from "../../components/ui/CountdownText";
+import {
+  ExerciseHeader,
+  ProgressBar,
+  ExerciseOptions,
+} from "../../components/exercise";
 
 type Phase = "loading" | "intro" | "exercise" | "result" | "complete";
 
@@ -286,40 +291,19 @@ export default function PracticeScreen() {
   return (
     <SafeAreaView style={styles.mainContainer}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-        >
-          <ArrowLeft size={24} color={colors.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          練習中 {currentIndex + 1} / {totalExercises}
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ExerciseHeader
+        title="練習中"
+        currentIndex={currentIndex}
+        total={totalExercises}
+        onBack={handleBack}
+      />
 
       {/* Progress Bar */}
-      <View style={styles.progressBarContainer}>
-        {answers.map((answer, i) => (
-          <View
-            key={i}
-            style={[
-              styles.progressBarItem,
-              answer.correct ? styles.progressBarSuccess : styles.progressBarDestructive,
-            ]}
-          />
-        ))}
-        {Array.from({ length: totalExercises - answers.length }).map((_, i) => (
-          <View
-            key={`pending-${i}`}
-            style={[
-              styles.progressBarItem,
-              i === 0 ? styles.progressBarPrimary : styles.progressBarMuted,
-            ]}
-          />
-        ))}
-      </View>
+      <ProgressBar
+        total={totalExercises}
+        currentIndex={currentIndex}
+        answers={answers}
+      />
 
       {/* Content */}
       <View style={[styles.contentContainer, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
@@ -409,52 +393,16 @@ export default function PracticeScreen() {
 
             {/* 選項區（閱讀和聽力題） */}
             {!currentExercise.type.startsWith("speaking") && (
-              <View style={currentExercise.type === "reading_lv1" ? styles.optionsContainerGrid : styles.optionsContainer}>
-                {currentExercise.options.map((option, index) => {
-                  const isSelected = selectedOptionIndex === index;
-                  const isCorrectOption = index === currentExercise.correct_index;
-                  const showResult = phase === "result";
-                  const isGridLayout = currentExercise.type === "reading_lv1";
-
-                  const baseStyle = isGridLayout ? styles.optionBaseGrid : styles.optionBase;
-                  let optionStyle = [baseStyle, styles.optionDefault];
-                  if (showResult) {
-                    if (isCorrectOption) {
-                      optionStyle = [baseStyle, styles.optionCorrect];
-                    } else if (isSelected && !isCorrectOption) {
-                      optionStyle = [baseStyle, styles.optionIncorrect];
-                    }
-                  } else if (isSelected) {
-                    optionStyle = [baseStyle, styles.optionSelected];
-                  }
-
-                  return (
-                    <TouchableOpacity
-                      key={option.word_id}
-                      style={optionStyle}
-                      onPress={() => handleOptionSelect(index)}
-                      disabled={showResult}
-                    >
-                      {option.image_url && isGridLayout && (
-                        <Image
-                          source={{ uri: getAssetUrl(option.image_url) || undefined }}
-                          style={styles.optionImageGrid}
-                          resizeMode="contain"
-                        />
-                      )}
-                      <Text style={isGridLayout ? styles.optionTextGrid : styles.optionText}>
-                        {option.translation}
-                      </Text>
-                      {showResult && isCorrectOption && (
-                        <Check size={24} color={colors.success} style={isGridLayout && styles.resultIcon} />
-                      )}
-                      {showResult && isSelected && !isCorrectOption && (
-                        <X size={24} color={colors.destructive} style={isGridLayout && styles.resultIcon} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <ExerciseOptions
+                options={currentExercise.options}
+                selectedIndex={selectedOptionIndex}
+                correctIndex={currentExercise.correct_index}
+                showResult={phase === "result"}
+                onSelect={handleOptionSelect}
+                disabled={phase === "result"}
+                layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
+                showImage={currentExercise.type === "reading_lv1"}
+              />
             )}
           </View>
         )}
@@ -567,52 +515,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.foreground,
-  },
-  headerSpacer: {
-    width: 40,
-  },
-
-  // Progress bar
-  progressBarContainer: {
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  progressBarItem: {
-    flex: 1,
-    height: 8,
-    borderRadius: 9999,
-  },
-  progressBarSuccess: {
-    backgroundColor: colors.success,
-  },
-  progressBarDestructive: {
-    backgroundColor: colors.destructive,
-  },
-  progressBarPrimary: {
-    backgroundColor: colors.primary,
-  },
-  progressBarMuted: {
-    backgroundColor: colors.muted,
-  },
 
   // Content
   contentContainer: {
@@ -706,78 +608,5 @@ const styles = StyleSheet.create({
   speakingButtonsContainer: {
     flexDirection: "row",
     gap: 16,
-  },
-
-  // Options
-  optionsContainer: {
-    width: "100%",
-    gap: 12,
-  },
-  optionsContainerGrid: {
-    width: "100%",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  optionBase: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  optionBaseGrid: {
-    width: "48%",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  optionDefault: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-  },
-  optionSelected: {
-    backgroundColor: `${colors.primary}1A`,
-    borderColor: colors.primary,
-  },
-  optionCorrect: {
-    backgroundColor: `${colors.success}33`,
-    borderColor: colors.success,
-  },
-  optionIncorrect: {
-    backgroundColor: `${colors.destructive}33`,
-    borderColor: colors.destructive,
-  },
-  optionImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: colors.muted,
-    marginRight: 16,
-  },
-  optionImageGrid: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: 8,
-    backgroundColor: colors.muted,
-    marginBottom: 8,
-  },
-  optionText: {
-    fontSize: 18,
-    color: colors.foreground,
-    flex: 1,
-  },
-  optionTextGrid: {
-    fontSize: 16,
-    color: colors.foreground,
-    textAlign: "center",
-  },
-  resultIcon: {
-    position: "absolute",
-    top: 8,
-    right: 8,
   },
 });

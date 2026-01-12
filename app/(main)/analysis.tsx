@@ -8,17 +8,17 @@ import {
     StyleSheet,
     useWindowDimensions,
     ScrollView,
-    Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { analysisService } from "../../services/analysisService";
-import { handleApiError, getAssetUrl } from "../../services/api";
+import { handleApiError } from "../../services/api";
 import type { LevelAnalysisExerciseSchema } from "../../types/api";
-import { ArrowLeft, Check, X, Sparkles } from "lucide-react-native";
+import { ArrowLeft, Sparkles } from "lucide-react-native";
 import { colors } from "../../lib/tw";
 import { LevelAnalysisLogic } from "../../utils/level-analysis-logic";
 import { CountdownText } from "../../components/ui/CountdownText";
+import { ExerciseOptions } from "../../components/exercise";
 
 type Phase = "loading" | "intro" | "q0" | "exercise" | "result" | "submitting";
 
@@ -304,44 +304,15 @@ export default function AnalysisScreen() {
 
                         <Text style={styles.exerciseHintText}>選出正確的翻譯</Text>
 
-                        <View style={styles.optionsContainer}>
-                            {currentExercise.options.map((option, index) => {
-                                const isSelected = selectedOptionIndex === index;
-                                const isCorrectOption = index === currentExercise.correct_index;
-                                const showResult = phase === "result";
-
-                                let optionStyle = [styles.optionButton, styles.optionDefault];
-                                if (showResult) {
-                                    if (isCorrectOption) {
-                                        optionStyle = [styles.optionButton, styles.optionCorrect];
-                                    } else if (isSelected && !isCorrectOption) {
-                                        optionStyle = [styles.optionButton, styles.optionWrong];
-                                    }
-                                } else if (isSelected) {
-                                    optionStyle = [styles.optionButton, styles.optionSelected];
-                                }
-
-                                return (
-                                    <TouchableOpacity
-                                        key={option.word_id}
-                                        style={optionStyle}
-                                        onPress={() => handleOptionSelect(index)}
-                                        disabled={showResult}
-                                    >
-                                        {option.image_url && (
-                                            <Image
-                                                source={{ uri: getAssetUrl(option.image_url) || undefined }}
-                                                style={styles.optionImage}
-                                                resizeMode="contain"
-                                            />
-                                        )}
-                                        <Text style={styles.optionText}>{option.translation}</Text>
-                                        {showResult && isCorrectOption && <Check size={24} color={colors.success} />}
-                                        {showResult && isSelected && !isCorrectOption && <X size={24} color={colors.destructive} />}
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
+                        <ExerciseOptions
+                            options={currentExercise.options}
+                            selectedIndex={selectedOptionIndex}
+                            correctIndex={currentExercise.correct_index}
+                            showResult={phase === "result"}
+                            onSelect={handleOptionSelect}
+                            disabled={phase === "result"}
+                            showImage={true}
+                        />
                     </View>
                 )}
             </View>
@@ -529,45 +500,6 @@ const styles = StyleSheet.create({
         fontSize: 18,
         color: colors.mutedForeground,
         marginBottom: 32,
-    },
-    optionsContainer: {
-        width: "100%",
-        gap: 12,
-    },
-    optionButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-    },
-    optionDefault: {
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-    },
-    optionSelected: {
-        backgroundColor: `${colors.primary}1A`,
-        borderColor: colors.primary,
-    },
-    optionCorrect: {
-        backgroundColor: `${colors.success}33`,
-        borderColor: colors.success,
-    },
-    optionWrong: {
-        backgroundColor: `${colors.destructive}33`,
-        borderColor: colors.destructive,
-    },
-    optionImage: {
-        width: 64,
-        height: 64,
-        borderRadius: 8,
-        backgroundColor: colors.muted,
-        marginRight: 16,
-    },
-    optionText: {
-        fontSize: 18,
-        color: colors.foreground,
-        flex: 1,
     },
     primaryButton: {
         backgroundColor: colors.primary,
