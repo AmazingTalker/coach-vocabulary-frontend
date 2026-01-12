@@ -303,7 +303,8 @@ export default function LearnScreen() {
               showResult={phase === "result"}
               onSelect={handleOptionSelect}
               disabled={phase === "result"}
-              showImage={true}
+              layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
+              showImage={currentExercise.type === "reading_lv1"}
             />
 
             {/* 超時提示 */}

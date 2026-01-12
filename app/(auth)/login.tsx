@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   StyleSheet,
   useWindowDimensions,
   ScrollView,
@@ -28,6 +27,7 @@ export default function LoginScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { login, register } = useAuth();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -50,46 +50,49 @@ export default function LoginScreen() {
     const trimmedPassword = password;
     const trimmedUsername = username.trim();
 
+    // 清除之前的錯誤
+    setError(null);
+
     // Email 驗證
     if (!trimmedEmail) {
-      Alert.alert("提示", "請輸入電子郵件");
+      setError("請輸入電子郵件");
       return;
     }
     if (!validateEmail(trimmedEmail)) {
-      Alert.alert("提示", "請輸入有效的電子郵件格式");
+      setError("請輸入有效的電子郵件格式");
       return;
     }
 
     // Password 驗證
     if (!trimmedPassword) {
-      Alert.alert("提示", "請輸入密碼");
+      setError("請輸入密碼");
       return;
     }
     if (trimmedPassword.length < 8) {
-      Alert.alert("提示", "密碼至少需要 8 個字元");
+      setError("密碼至少需要 8 個字元");
       return;
     }
     if (trimmedPassword.length > 100) {
-      Alert.alert("提示", "密碼不能超過 100 個字元");
+      setError("密碼不能超過 100 個字元");
       return;
     }
 
     // 註冊模式：額外驗證
     if (mode === "register") {
       if (!trimmedUsername) {
-        Alert.alert("提示", "請輸入用戶名");
+        setError("請輸入用戶名");
         return;
       }
       if (trimmedUsername.length < 3) {
-        Alert.alert("提示", "用戶名至少需要 3 個字元");
+        setError("用戶名至少需要 3 個字元");
         return;
       }
       if (trimmedUsername.length > 50) {
-        Alert.alert("提示", "用戶名不能超過 50 個字元");
+        setError("用戶名不能超過 50 個字元");
         return;
       }
       if (trimmedPassword !== confirmPassword) {
-        Alert.alert("提示", "兩次輸入的密碼不一致");
+        setError("兩次輸入的密碼不一致");
         return;
       }
     }
@@ -103,9 +106,9 @@ export default function LoginScreen() {
         await register(trimmedEmail, trimmedUsername, trimmedPassword);
       }
       router.replace("/(main)");
-    } catch (error) {
-      const message = handleApiError(error);
-      Alert.alert(mode === "login" ? "登入失敗" : "註冊失敗", message);
+    } catch (err) {
+      const message = handleApiError(err);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -113,10 +116,11 @@ export default function LoginScreen() {
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
-    // 清除密碼相關欄位，保留已輸入的 email
+    // 清除密碼相關欄位和錯誤，保留已輸入的 email
     setPassword("");
     setConfirmPassword("");
     setUsername("");
+    setError(null);
   };
 
   // Focus handlers
@@ -259,6 +263,11 @@ export default function LoginScreen() {
                   </Text>
                 )}
               </TouchableOpacity>
+
+              {/* Error Message */}
+              {error && (
+                <Text style={styles.errorText}>{error}</Text>
+              )}
             </View>
           </View>
         </ScrollView>
@@ -376,5 +385,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: colors.primaryForeground,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.destructive,
+    textAlign: "center",
+    marginTop: 16,
   },
 });
