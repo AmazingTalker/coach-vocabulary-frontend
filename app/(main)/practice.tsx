@@ -409,21 +409,23 @@ export default function PracticeScreen() {
 
             {/* 選項區（閱讀和聽力題） */}
             {!currentExercise.type.startsWith("speaking") && (
-              <View style={styles.optionsContainer}>
+              <View style={currentExercise.type === "reading_lv1" ? styles.optionsContainerGrid : styles.optionsContainer}>
                 {currentExercise.options.map((option, index) => {
                   const isSelected = selectedOptionIndex === index;
                   const isCorrectOption = index === currentExercise.correct_index;
                   const showResult = phase === "result";
+                  const isGridLayout = currentExercise.type === "reading_lv1";
 
-                  let optionStyle = [styles.optionBase, styles.optionDefault];
+                  const baseStyle = isGridLayout ? styles.optionBaseGrid : styles.optionBase;
+                  let optionStyle = [baseStyle, styles.optionDefault];
                   if (showResult) {
                     if (isCorrectOption) {
-                      optionStyle = [styles.optionBase, styles.optionCorrect];
+                      optionStyle = [baseStyle, styles.optionCorrect];
                     } else if (isSelected && !isCorrectOption) {
-                      optionStyle = [styles.optionBase, styles.optionIncorrect];
+                      optionStyle = [baseStyle, styles.optionIncorrect];
                     }
                   } else if (isSelected) {
-                    optionStyle = [styles.optionBase, styles.optionSelected];
+                    optionStyle = [baseStyle, styles.optionSelected];
                   }
 
                   return (
@@ -433,21 +435,21 @@ export default function PracticeScreen() {
                       onPress={() => handleOptionSelect(index)}
                       disabled={showResult}
                     >
-                      {option.image_url && currentExercise.type === "reading_lv1" && (
+                      {option.image_url && isGridLayout && (
                         <Image
                           source={{ uri: getAssetUrl(option.image_url) || undefined }}
-                          style={styles.optionImage}
+                          style={styles.optionImageGrid}
                           resizeMode="contain"
                         />
                       )}
-                      <Text style={styles.optionText}>
+                      <Text style={isGridLayout ? styles.optionTextGrid : styles.optionText}>
                         {option.translation}
                       </Text>
                       {showResult && isCorrectOption && (
-                        <Check size={24} color={colors.success} />
+                        <Check size={24} color={colors.success} style={isGridLayout && styles.resultIcon} />
                       )}
                       {showResult && isSelected && !isCorrectOption && (
-                        <X size={24} color={colors.destructive} />
+                        <X size={24} color={colors.destructive} style={isGridLayout && styles.resultIcon} />
                       )}
                     </TouchableOpacity>
                   );
@@ -711,10 +713,25 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 12,
   },
+  optionsContainerGrid: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   optionBase: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+  },
+  optionBaseGrid: {
+    width: "48%",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: 12,
     borderRadius: 12,
     borderWidth: 2,
   },
@@ -741,9 +758,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
     marginRight: 16,
   },
+  optionImageGrid: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 8,
+    backgroundColor: colors.muted,
+    marginBottom: 8,
+  },
   optionText: {
     fontSize: 18,
     color: colors.foreground,
     flex: 1,
+  },
+  optionTextGrid: {
+    fontSize: 16,
+    color: colors.foreground,
+    textAlign: "center",
+  },
+  resultIcon: {
+    position: "absolute",
+    top: 8,
+    right: 8,
   },
 });
