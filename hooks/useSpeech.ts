@@ -1,5 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from "react";
-import { Platform } from "react-native";
+import { Audio, AVPlaybackStatus } from "expo-av";
+import * as Speech from "expo-speech";
 
 interface UseSpeechReturn {
   speak: (text: string, audioUrl?: string | null) => Promise<void>;
@@ -9,122 +10,98 @@ interface UseSpeechReturn {
 }
 
 /**
- * 使用 Web Speech API 進行 TTS 播放
- */
-function createTTSPromise(
-  text: string,
-  setIsSpeaking: (value: boolean) => void,
-  utteranceRef: React.MutableRefObject<SpeechSynthesisUtterance | null>
-): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      console.warn("Speech synthesis not available");
-      resolve();
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      resolve();
-    };
-    utterance.onerror = (event) => {
-      console.error("Speech synthesis error:", event);
-      setIsSpeaking(false);
-      resolve();
-    };
-
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  });
-}
-
-/**
- * 語音播放 Hook
+ * 語音播放 Hook（跨平台支援）
  *
- * 優先使用提供的音檔 URL，若為 null 則使用 Web Speech API TTS
+ * 優先使用提供的音檔 URL（透過 expo-av），
+ * 若播放失敗則使用 TTS 作為備案（透過 expo-speech）
+ *
+ * 支援平台：Web、iOS、Android
  */
 export function useSpeech(): UseSpeechReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
-  const isWebPlatform = Platform.OS === "web";
-  const isSupported = isWebPlatform && typeof window !== "undefined";
+  // 所有平台都支援
+  const isSupported = true;
 
-  const cancel = useCallback(() => {
-    if (!isSupported) return;
-
-    // 取消 TTS
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+  const cancel = useCallback(async () => {
+    // 停止音檔播放
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+      } catch (error) {
+        console.warn("Error stopping audio:", error);
+      }
+      soundRef.current = null;
     }
 
-    // 取消音檔播放
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current = null;
-    }
+    // 停止 TTS
+    Speech.stop();
 
     setIsSpeaking(false);
-  }, [isSupported]);
+  }, []);
 
   const speak = useCallback(
     async (text: string, audioUrl?: string | null): Promise<void> => {
-      if (!isSupported) {
-        console.warn("Speech not supported on this platform");
-        return;
+      // 取消之前的播放
+      await cancel();
+
+      // 如果有音檔 URL，優先使用音檔
+      if (audioUrl) {
+        try {
+          const { sound } = await Audio.Sound.createAsync(
+            { uri: audioUrl },
+            { shouldPlay: true }
+          );
+          soundRef.current = sound;
+          setIsSpeaking(true);
+
+          return new Promise<void>((resolve) => {
+            sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+              if (status.isLoaded && status.didJustFinish) {
+                setIsSpeaking(false);
+                sound.unloadAsync();
+                soundRef.current = null;
+                resolve();
+              }
+            });
+          });
+        } catch (error) {
+          console.warn("Audio playback failed, falling back to TTS:", error);
+          // 繼續使用 TTS 作為備案
+        }
       }
 
-      // 取消之前的播放
-      cancel();
-
-      // 定義 TTS 備案函數
-      const speakWithTTS = () => createTTSPromise(text, setIsSpeaking, utteranceRef);
-
-      return new Promise((resolve) => {
-        // 如果有音檔 URL，優先使用音檔
-        if (audioUrl) {
-          const audio = new Audio(audioUrl);
-          audioRef.current = audio;
-
-          audio.onplay = () => setIsSpeaking(true);
-          audio.onended = () => {
+      // 備案：使用 TTS
+      return new Promise<void>((resolve) => {
+        setIsSpeaking(true);
+        Speech.speak(text, {
+          language: "en-US",
+          rate: 0.9,
+          onDone: () => {
             setIsSpeaking(false);
-            audioRef.current = null;
             resolve();
-          };
-          audio.onerror = () => {
-            console.warn("Audio playback failed, falling back to TTS");
-            audioRef.current = null;
-            // 音檔播放失敗，使用 TTS 作為備案
-            speakWithTTS().then(resolve);
-          };
-
-          audio.play().catch(() => {
-            // 播放失敗，使用 TTS
-            speakWithTTS().then(resolve);
-          });
-          return;
-        }
-
-        // 沒有音檔 URL，使用 TTS
-        speakWithTTS().then(resolve);
+          },
+          onError: () => {
+            setIsSpeaking(false);
+            resolve();
+          },
+        });
       });
     },
-    [isSupported, cancel]
+    [cancel]
   );
 
-  // 組件卸載時取消播放
+  // 組件卸載時清理
   useEffect(() => {
-    return () => cancel();
-  }, [cancel]);
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+      Speech.stop();
+    };
+  }, []);
 
   return { speak, cancel, isSpeaking, isSupported };
 }
