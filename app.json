@@ -14,14 +14,24 @@
       "backgroundColor": "#2db877"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "允許 $(PRODUCT_NAME) 使用語音辨識功能。",
+        "NSMicrophoneUsageDescription": "允許 $(PRODUCT_NAME) 使用麥克風以進行語音辨識練習。",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.anonymous.coach-vocabulary-frontend"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2db877"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.coachvocabularyfrontend"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -34,12 +44,20 @@
         {
           "microphonePermission": "允許 $(PRODUCT_NAME) 使用麥克風以進行語音辨識練習。",
           "speechRecognitionPermission": "允許 $(PRODUCT_NAME) 使用語音辨識功能。",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4e813532-e602-4787-bc8b-6afb659eb232"
+      }
     }
   }
 }
