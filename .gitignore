@@ -43,5 +43,7 @@ yarn-error.*
 .vscode/
 
 PROMPT.md
-ralph.yml   
-ralph_orchestrator.log
+ralph*.md
+ralph*.yml
+ralph*.log
+run-interactive-ralph.sh
