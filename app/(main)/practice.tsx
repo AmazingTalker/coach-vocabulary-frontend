@@ -14,8 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
 import { handleApiError, getAssetUrl } from "../../services/api";
 import type { PracticeSessionResponse, AnswerSchema } from "../../types/api";
-import { Volume2, Check } from "lucide-react-native";
+import { Volume2, Check, Mic, X } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
+import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 import { colors } from "../../lib/tw";
 import { CountdownText } from "../../components/ui/CountdownText";
 import {
@@ -35,6 +36,13 @@ export default function PracticeScreen() {
   const { speak, isSpeaking } = useSpeech();
   const { width } = useWindowDimensions();
 
+  // 語音辨識 Hook
+  const speechRecognition = useSpeechRecognition({
+    lang: "en-US",
+    interimResults: true,
+    continuous: false,
+  });
+
   // 寬螢幕時使用較窄的內容寬度
   const isWideScreen = width > 600;
   const contentMaxWidth = isWideScreen ? 480 : undefined;
@@ -44,6 +52,10 @@ export default function PracticeScreen() {
   const [pagePhase, setPagePhase] = useState<PagePhase>("loading");
   const [answers, setAnswers] = useState<AnswerSchema[]>([]);
   const [currentExerciseType, setCurrentExerciseType] = useState<string>("");
+
+  // 口說練習專用狀態
+  const [recognizedText, setRecognizedText] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
 
   const exercises = session?.exercises || [];
   const currentExercise = exercises[currentIndex];
@@ -75,6 +87,16 @@ export default function PracticeScreen() {
     return `複習池 ${pool}`;
   };
 
+  // 比對邏輯（包含匹配）
+  const checkAnswer = (transcript: string, correctWord: string): boolean => {
+    // 簡化的正規化：只轉小寫和去除首尾空白
+    const normalizedTranscript = transcript.toLowerCase().trim();
+    const normalizedCorrect = correctWord.toLowerCase().trim();
+
+    // 包含匹配：辨識結果包含正確單字即算對
+    return normalizedTranscript.includes(normalizedCorrect);
+  };
+
   // 用來記錄當前答案
   const answersRef = useRef<AnswerSchema[]>([]);
 
@@ -89,8 +111,6 @@ export default function PracticeScreen() {
       if (nextCategory !== currentExerciseType) {
         setCurrentExerciseType(nextCategory);
         setPagePhase("intro");
-      } else if (nextCategory === "speaking") {
-        setPagePhase("speaking");
       } else {
         setPagePhase("exercising");
         exerciseFlow.reset();
@@ -102,15 +122,30 @@ export default function PracticeScreen() {
     }
   }, [currentIndex, totalExercises, exercises, currentExerciseType]);
 
-  // 使用共用的答題流程 Hook（閱讀/聽力題）
+  // 使用共用的答題流程 Hook（閱讀/聽力/口說題）
   const exerciseFlow = useExerciseFlow({}, () => {
     // 記錄答案
     if (currentExercise) {
-      const correct = exerciseFlow.selectedIndex === currentExercise.correct_index;
-      const newAnswer = { word_id: currentExercise.word_id, correct };
+      let correct = false;
+
+      if (currentExercise.type.startsWith("speaking")) {
+        // 口說題：根據辨識結果判斷
+        correct = recognizedText.trim() !== "" &&
+                  checkAnswer(recognizedText, currentExercise.word);
+      } else {
+        // 閱讀/聽力題：根據選中的索引判斷
+        correct = exerciseFlow.selectedIndex === currentExercise.correct_index;
+      }
+
+      const newAnswer: AnswerSchema = { word_id: currentExercise.word_id, correct };
       setAnswers((prev) => [...prev, newAnswer]);
       answersRef.current = [...answersRef.current, newAnswer];
     }
+
+    // 清理口說狀態
+    setRecognizedText("");
+    setIsRecording(false);
+
     goToNextExercise();
   });
 
@@ -152,26 +187,111 @@ export default function PracticeScreen() {
     }
   }, [pagePhase, exerciseFlow.phase, currentExercise, speak]);
 
-  // 處理口說練習（簡化版：手動確認）
-  const handleSpeakingConfirm = (correct: boolean) => {
-    setAnswers((prev) => [
-      ...prev,
-      { word_id: currentExercise!.word_id, correct },
-    ]);
+  // 錄音函數
+  const startRecording = async () => {
+    if (!speechRecognition.isSupported) {
+      Alert.alert("不支援", "此裝置不支援語音辨識功能");
+      exerciseFlow.select(-1); // 標記為錯誤/超時
+      return;
+    }
 
-    setTimeout(() => {
-      goToNextExercise();
-    }, 1000);
+    const success = await speechRecognition.start();
+    if (success) {
+      setIsRecording(true);
+    } else {
+      Alert.alert(
+        "無法啟動",
+        speechRecognition.error || "無法啟動語音辨識，請檢查麥克風權限"
+      );
+      exerciseFlow.select(-1);
+    }
   };
+
+  const handleStopRecording = () => {
+    if (isRecording) {
+      // 先清除計時器，防止超時 callback 搶先執行
+      exerciseFlow.clearTimer();
+
+      // 使用當前的 final 或 interim transcript（優先使用 final）
+      const transcript = speechRecognition.finalTranscript || speechRecognition.interimTranscript;
+
+      if (transcript && currentExercise) {
+        setRecognizedText(transcript);
+        const correct = checkAnswer(transcript, currentExercise.word);
+        exerciseFlow.select(correct ? 0 : -1);
+      } else {
+        // 沒有辨識到任何內容
+        exerciseFlow.select(-1);
+      }
+
+      speechRecognition.abort(); // 使用 abort 而非 stop，避免觸發額外的 result 事件
+      setIsRecording(false);
+    }
+  };
+
+  // 口說題：進入 options 階段自動開始錄音
+  useEffect(() => {
+    if (
+      pagePhase === "exercising" &&
+      exerciseFlow.phase === "options" &&
+      currentExercise?.type.startsWith("speaking") &&
+      !isRecording
+    ) {
+      startRecording();
+    }
+  }, [pagePhase, exerciseFlow.phase, currentExercise, isRecording]);
+
+  // 口說題：超時時檢查是否有已辨識的內容
+  useEffect(() => {
+    if (
+      pagePhase === "exercising" &&
+      exerciseFlow.phase === "result" &&
+      currentExercise?.type.startsWith("speaking") &&
+      isRecording
+    ) {
+      // 超時但還在錄音中，使用已辨識的內容來判斷
+      const transcript = speechRecognition.finalTranscript || speechRecognition.interimTranscript;
+
+      if (transcript) {
+        setRecognizedText(transcript);
+        // 注意：這裡不能改變 exerciseFlow.selectedIndex，因為已經在 result 階段
+        // 但我們可以更新 recognizedText 來顯示用戶說了什麼
+      }
+
+      speechRecognition.abort();
+      setIsRecording(false);
+    }
+  }, [pagePhase, exerciseFlow.phase, currentExercise, isRecording, speechRecognition.finalTranscript, speechRecognition.interimTranscript]);
+
+  // 監聽辨識完成並自動提交答案
+  // 注意：不依賴 isRecording，因為 handleStopRecording 會在 finalTranscript 回傳前就設為 false
+  // 改用 exerciseFlow.phase === "options" 來確保只處理一次
+  useEffect(() => {
+    if (
+      speechRecognition.finalTranscript &&
+      currentExercise?.type.startsWith("speaking") &&
+      pagePhase === "exercising" &&
+      exerciseFlow.phase === "options"
+    ) {
+      setIsRecording(false);
+      setRecognizedText(speechRecognition.finalTranscript);
+
+      // 比對答案
+      const correct = checkAnswer(
+        speechRecognition.finalTranscript,
+        currentExercise.word
+      );
+
+      // 使用 select 觸發 result 階段
+      // 使用 0 表示正確，-1 表示錯誤
+      exerciseFlow.select(correct ? 0 : -1);
+    }
+  }, [speechRecognition.finalTranscript, currentExercise, pagePhase, exerciseFlow.phase]);
 
   // 開始練習（從 intro 進入）
   const startExercise = () => {
-    if (currentExercise?.type.startsWith("speaking")) {
-      setPagePhase("speaking");
-    } else {
-      setPagePhase("exercising");
-      exerciseFlow.start();
-    }
+    setPagePhase("exercising");
+    exerciseFlow.start();
   };
 
   // 完成練習
@@ -188,6 +308,10 @@ export default function PracticeScreen() {
   // 返回
   const handleBack = () => {
     exerciseFlow.clearTimer();
+    if (isRecording) {
+      speechRecognition.abort();
+      setIsRecording(false);
+    }
     Alert.alert("確定離開？", "練習進度將不會保存", [
       { text: "取消", style: "cancel" },
       { text: "離開", style: "destructive", onPress: () => router.back() },
@@ -279,44 +403,7 @@ export default function PracticeScreen() {
               </Text>
             </View>
 
-            {/* 口說練習 */}
-            {pagePhase === "speaking" && currentExercise.type.startsWith("speaking") && (
-              <View style={styles.speakingContainer}>
-                {currentExercise.image_url && (
-                  <Image
-                    source={{ uri: getAssetUrl(currentExercise.image_url) || undefined }}
-                    style={styles.speakingImage}
-                    resizeMode="contain"
-                  />
-                )}
-                <Text style={styles.speakingWord}>
-                  {currentExercise.translation}
-                </Text>
-                <Text style={styles.speakingInstruction}>
-                  說出這個單字
-                </Text>
-                <View style={styles.speakingButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.destructiveButton}
-                    onPress={() => handleSpeakingConfirm(false)}
-                  >
-                    <Text style={styles.destructiveButtonText}>
-                      我不會
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.successButton}
-                    onPress={() => handleSpeakingConfirm(true)}
-                  >
-                    <Text style={styles.successButtonText}>
-                      我會
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* 閱讀/聽力練習 - 使用 exerciseFlow */}
+            {/* 閱讀/聽力/口說練習 - 使用 exerciseFlow */}
             {pagePhase === "exercising" && (
               <>
                 {/* 題目階段 */}
@@ -346,6 +433,23 @@ export default function PracticeScreen() {
                         </Text>
                       </View>
                     )}
+                    {currentExercise.type.startsWith("speaking") && (
+                      <>
+                        {currentExercise.image_url && (
+                          <Image
+                            source={{ uri: getAssetUrl(currentExercise.image_url) || undefined }}
+                            style={styles.speakingImage}
+                            resizeMode="contain"
+                          />
+                        )}
+                        <Text style={styles.speakingWord}>
+                          {currentExercise.translation}
+                        </Text>
+                        <Text style={styles.speakingInstruction}>
+                          準備作答...
+                        </Text>
+                      </>
+                    )}
                   </>
                 )}
 
@@ -353,35 +457,120 @@ export default function PracticeScreen() {
                 {exerciseFlow.phase === "options" && (
                   <>
                     <CountdownText remainingMs={exerciseFlow.remainingMs} />
-                    <ExerciseOptions
-                      options={currentExercise.options}
-                      selectedIndex={null}
-                      correctIndex={currentExercise.correct_index}
-                      showResult={false}
-                      onSelect={exerciseFlow.select}
-                      disabled={false}
-                      layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
-                      showImage={currentExercise.type === "reading_lv1"}
-                    />
+                    {currentExercise.type.startsWith("speaking") ? (
+                      <>
+                        {/* 錄音中圖示 */}
+                        <View style={styles.recordingContainer}>
+                          <View style={[styles.micButton, isRecording && styles.micButtonActive]}>
+                            <Mic size={48} color={isRecording ? colors.destructive : colors.primary} />
+                          </View>
+                          {isRecording && (
+                            <View style={styles.recordingIndicator}>
+                              <View style={styles.recordingDot} />
+                              <Text style={styles.recordingText}>錄音中...</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* 即時辨識結果 */}
+                        {speechRecognition.interimTranscript && (
+                          <View style={styles.transcriptBox}>
+                            <Text style={styles.transcriptLabel}>辨識中：</Text>
+                            <Text style={styles.transcriptText}>
+                              "{speechRecognition.interimTranscript}"
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* 完成按鈕 */}
+                        <TouchableOpacity
+                          style={styles.primaryButton}
+                          onPress={handleStopRecording}
+                          disabled={!isRecording}
+                        >
+                          <Text style={styles.primaryButtonText}>完成</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <ExerciseOptions
+                        options={currentExercise.options}
+                        selectedIndex={null}
+                        correctIndex={currentExercise.correct_index}
+                        showResult={false}
+                        onSelect={exerciseFlow.select}
+                        disabled={false}
+                        layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
+                        showImage={currentExercise.type === "reading_lv1"}
+                      />
+                    )}
                   </>
                 )}
 
                 {/* 結果階段 */}
                 {exerciseFlow.phase === "result" && (
                   <>
-                    {exerciseFlow.selectedIndex === -1 && (
-                      <Text style={styles.timeoutText}>時間到！</Text>
+                    {currentExercise.type.startsWith("speaking") ? (
+                      <>
+                        {/* 口說題：使用實際比對結果來判斷正確性，而非 selectedIndex */}
+                        {(() => {
+                          const isCorrect = recognizedText.trim() !== "" &&
+                            checkAnswer(recognizedText, currentExercise.word);
+                          return (
+                            <>
+                              {/* 結果圖示 */}
+                              <View style={[
+                                styles.resultIconContainer,
+                                isCorrect
+                                  ? styles.resultCorrect
+                                  : styles.resultIncorrect
+                              ]}>
+                                {isCorrect ? (
+                                  <Check size={64} color={colors.success} />
+                                ) : (
+                                  <X size={64} color={colors.destructive} />
+                                )}
+                              </View>
+
+                              {/* 你說的內容 */}
+                              {recognizedText && (
+                                <View style={styles.transcriptBox}>
+                                  <Text style={styles.transcriptLabel}>你說：</Text>
+                                  <Text style={styles.transcriptText}>
+                                    "{recognizedText}"
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* 正確答案（如果答錯） */}
+                              {!isCorrect && (
+                                <View style={styles.correctAnswerBox}>
+                                  <Text style={styles.correctAnswerLabel}>正確答案：</Text>
+                                  <Text style={styles.correctAnswerText}>
+                                    {currentExercise.word}
+                                  </Text>
+                                </View>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        {exerciseFlow.selectedIndex === -1 && (
+                          <Text style={styles.timeoutText}>時間到！</Text>
+                        )}
+                        <ExerciseOptions
+                          options={currentExercise.options}
+                          selectedIndex={exerciseFlow.selectedIndex}
+                          correctIndex={currentExercise.correct_index}
+                          showResult={true}
+                          onSelect={() => {}}
+                          disabled={true}
+                          layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
+                          showImage={currentExercise.type === "reading_lv1"}
+                        />
+                      </>
                     )}
-                    <ExerciseOptions
-                      options={currentExercise.options}
-                      selectedIndex={exerciseFlow.selectedIndex}
-                      correctIndex={currentExercise.correct_index}
-                      showResult={true}
-                      onSelect={() => {}}
-                      disabled={true}
-                      layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
-                      showImage={currentExercise.type === "reading_lv1"}
-                    />
                   </>
                 )}
               </>
@@ -590,5 +779,98 @@ const styles = StyleSheet.create({
   speakingButtonsContainer: {
     flexDirection: "row",
     gap: 16,
+  },
+
+  // 錄音容器
+  recordingContainer: {
+    alignItems: "center",
+    marginVertical: 24,
+  },
+
+  // 麥克風按鈕
+  micButton: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: `${colors.primary}1A`,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micButtonActive: {
+    backgroundColor: `${colors.destructive}33`,
+  },
+
+  // 錄音中指示器
+  recordingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.destructive,
+    marginRight: 8,
+  },
+  recordingText: {
+    fontSize: 14,
+    color: colors.destructive,
+    fontWeight: "500",
+  },
+
+  // 辨識結果顯示
+  transcriptBox: {
+    backgroundColor: colors.muted,
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 16,
+    width: "100%",
+  },
+  transcriptLabel: {
+    fontSize: 14,
+    color: colors.mutedForeground,
+    marginBottom: 4,
+  },
+  transcriptText: {
+    fontSize: 18,
+    color: colors.foreground,
+    fontWeight: "500",
+  },
+
+  // 結果顯示
+  resultIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  resultCorrect: {
+    backgroundColor: `${colors.success}33`,
+  },
+  resultIncorrect: {
+    backgroundColor: `${colors.destructive}33`,
+  },
+
+  // 正確答案顯示
+  correctAnswerBox: {
+    backgroundColor: `${colors.success}1A`,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    width: "100%",
+  },
+  correctAnswerLabel: {
+    fontSize: 14,
+    color: colors.success,
+    marginBottom: 4,
+    fontWeight: "600",
+  },
+  correctAnswerText: {
+    fontSize: 20,
+    color: colors.success,
+    fontWeight: "bold",
   },
 });

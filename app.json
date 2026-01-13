@@ -28,7 +28,15 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "允許 $(PRODUCT_NAME) 使用麥克風以進行語音辨識練習。",
+          "speechRecognitionPermission": "允許 $(PRODUCT_NAME) 使用語音辨識功能。",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
