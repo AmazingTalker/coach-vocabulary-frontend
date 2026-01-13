@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Image,
   StyleSheet,
@@ -14,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { learnService } from "../../services/learnService";
 import { handleApiError, getAssetUrl } from "../../services/api";
 import type { LearnSessionResponse, AnswerSchema } from "../../types/api";
-import { Volume2, Check } from "lucide-react-native";
+import { Volume2 } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
 import { colors } from "../../lib/tw";
 import { CountdownText } from "../../components/ui/CountdownText";
@@ -22,6 +21,8 @@ import {
   ExerciseHeader,
   ProgressBar,
   ExerciseOptions,
+  ExerciseLoading,
+  ExerciseComplete,
 } from "../../components/exercise";
 import { useExerciseFlow } from "../../hooks/useExerciseFlow";
 
@@ -177,36 +178,16 @@ export default function LearnScreen() {
   };
 
   if (pagePhase === "loading") {
-    return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>載入中...</Text>
-      </SafeAreaView>
-    );
+    return <ExerciseLoading />;
   }
 
   if (pagePhase === "complete") {
     return (
-      <SafeAreaView style={styles.completeContainer}>
-        <View style={styles.successIconContainer}>
-          <Check size={48} color={colors.success} />
-        </View>
-        <Text style={styles.completeTitle}>
-          學習完成！
-        </Text>
-        <Text style={styles.completeSubtitle}>
-          你已學習 {totalWords} 個新單字{"\n"}
-          10 分鐘後可以開始練習
-        </Text>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => router.replace("/(main)")}
-        >
-          <Text style={styles.primaryButtonText}>
-            返回首頁
-          </Text>
-        </TouchableOpacity>
-      </SafeAreaView>
+      <ExerciseComplete
+        title="學習完成！"
+        subtitle={`你已學習 ${totalWords} 個新單字\n10 分鐘後可以開始練習`}
+        onBack={() => router.replace("/(main)")}
+      />
     );
   }
 
@@ -325,61 +306,6 @@ export default function LearnScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Loading screen
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    color: colors.mutedForeground,
-    marginTop: 16,
-  },
-
-  // Complete screen
-  completeContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  successIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 9999,
-    backgroundColor: `${colors.success}33`,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  completeTitle: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 8,
-  },
-  completeSubtitle: {
-    fontSize: 18,
-    color: colors.mutedForeground,
-    textAlign: "center",
-    marginBottom: 32,
-  },
-
-  // Primary button
-  primaryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-  },
-  primaryButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.primaryForeground,
-  },
-
   // Main container
   container: {
     flex: 1,

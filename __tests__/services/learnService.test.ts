@@ -78,7 +78,7 @@ describe('learnService', () => {
         {
           word_id: 'word-1',
           exercise_type: 'multiple_choice' as const,
-          is_correct: true,
+          correct: true,
           response_time_ms: 1500,
         },
       ];

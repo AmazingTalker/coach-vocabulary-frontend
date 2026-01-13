@@ -47,3 +47,4 @@ ralph*.md
 ralph*.yml
 ralph*.log
 run-interactive-ralph.sh
+/coverage

@@ -64,13 +64,13 @@ describe('practiceService', () => {
         {
           word_id: 'word-1',
           exercise_type: 'multiple_choice' as const,
-          is_correct: true,
+          correct: true,
           response_time_ms: 1200,
         },
         {
           word_id: 'word-2',
           exercise_type: 'speaking' as const,
-          is_correct: false,
+          correct: false,
           response_time_ms: 2500,
         },
       ];
@@ -108,7 +108,7 @@ describe('practiceService', () => {
         {
           word_id: 'test-word',
           exercise_type: 'multiple_choice' as const,
-          is_correct: true,
+          correct: true,
           response_time_ms: 1000,
           selected_option_index: 2,
         },

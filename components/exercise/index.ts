@@ -10,4 +10,12 @@ export type { ProgressBarProps } from "./ProgressBar";
 export { ExerciseHeader } from "./ExerciseHeader";
 export type { ExerciseHeaderProps } from "./ExerciseHeader";
 
+export { PoolBadge } from "./PoolBadge";
+
+export { SpeakingResult } from "./SpeakingResult";
+
+export { ExerciseLoading } from "./ExerciseLoading";
+
+export { ExerciseComplete } from "./ExerciseComplete";
+
 export { exerciseStyles, colors } from "./styles";

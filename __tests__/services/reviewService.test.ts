@@ -78,13 +78,13 @@ describe('reviewService', () => {
         {
           word_id: 'word-1',
           exercise_type: 'speaking' as const,
-          is_correct: true,
+          correct: true,
           response_time_ms: 2000,
         },
         {
           word_id: 'word-2',
           exercise_type: 'multiple_choice' as const,
-          is_correct: false,
+          correct: false,
           response_time_ms: 1500,
         },
       ];
@@ -120,7 +120,7 @@ describe('reviewService', () => {
         {
           word_id: 'id-1',
           exercise_type: 'multiple_choice' as const,
-          is_correct: true,
+          correct: true,
           response_time_ms: 1200,
         },
       ];

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Image,
   StyleSheet,
@@ -14,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { reviewService } from "../../services/reviewService";
 import { handleApiError, getAssetUrl } from "../../services/api";
 import type { ReviewSessionResponse, AnswerSchema } from "../../types/api";
-import { Volume2, Check, Mic, X } from "lucide-react-native";
+import { Volume2, Mic } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 import { colors } from "../../lib/tw";
@@ -23,8 +22,13 @@ import {
   ExerciseHeader,
   ProgressBar,
   ExerciseOptions,
+  ExerciseLoading,
+  ExerciseComplete,
+  PoolBadge,
+  SpeakingResult,
 } from "../../components/exercise";
 import { useExerciseFlow } from "../../hooks/useExerciseFlow";
+import { checkSpeakingAnswer } from "../../utils/exerciseHelpers";
 
 type PagePhase = "loading" | "display" | "exercising" | "complete";
 
@@ -101,7 +105,7 @@ export default function ReviewScreen() {
       if (currentExercise.type.startsWith("speaking")) {
         // 口說題：根據辨識結果判斷
         correct = recognizedText.trim() !== "" &&
-                  checkAnswer(recognizedText, currentWord.word);
+                  checkSpeakingAnswer(recognizedText, currentWord.word);
         // user_answer：使用 recognizedText（包含超時時的 interim transcript）
         userAnswer = recognizedText.trim() || undefined;
       } else {
@@ -181,17 +185,6 @@ export default function ReviewScreen() {
     return () => clearDisplayTimer();
   }, [pagePhase, currentIndex, currentWord, speak]);
 
-  const getPoolLabel = (pool: string): string => {
-    return `複習池 ${pool}`;
-  };
-
-  // 比對邏輯（包含匹配）
-  const checkAnswer = (transcript: string, correctWord: string): boolean => {
-    const normalizedTranscript = transcript.toLowerCase().trim();
-    const normalizedCorrect = correctWord.toLowerCase().trim();
-    return normalizedTranscript.includes(normalizedCorrect);
-  };
-
   // 錄音函數
   const startRecording = async () => {
     if (!speechRecognition.isSupported) {
@@ -220,7 +213,7 @@ export default function ReviewScreen() {
 
       if (transcript && currentWord) {
         setRecognizedText(transcript);
-        const correct = checkAnswer(transcript, currentWord.word);
+        const correct = checkSpeakingAnswer(transcript, currentWord.word);
         exerciseFlow.select(correct ? 0 : -1);
       } else {
         exerciseFlow.select(-1);
@@ -288,7 +281,7 @@ export default function ReviewScreen() {
       setIsRecording(false);
       setRecognizedText(speechRecognition.finalTranscript);
 
-      const correct = checkAnswer(
+      const correct = checkSpeakingAnswer(
         speechRecognition.finalTranscript,
         currentWord.word
       );
@@ -330,36 +323,17 @@ export default function ReviewScreen() {
   };
 
   if (pagePhase === "loading") {
-    return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>載入中...</Text>
-      </SafeAreaView>
-    );
+    return <ExerciseLoading />;
   }
 
   if (pagePhase === "complete") {
     const correctCount = answers.filter((a) => a.correct).length;
     return (
-      <SafeAreaView style={styles.completeContainer}>
-        <View style={styles.completeIconContainer}>
-          <Check size={48} color={colors.success} />
-        </View>
-        <Text style={styles.completeTitle}>
-          複習完成！
-        </Text>
-        <Text style={styles.completeSubtitle}>
-          答對 {correctCount} / {totalWords} 題
-        </Text>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => router.replace("/(main)")}
-        >
-          <Text style={styles.primaryButtonText}>
-            返回首頁
-          </Text>
-        </TouchableOpacity>
-      </SafeAreaView>
+      <ExerciseComplete
+        title="複習完成！"
+        subtitle={`答對 ${correctCount} / ${totalWords} 題`}
+        onBack={() => router.replace("/(main)")}
+      />
     );
   }
 
@@ -389,11 +363,7 @@ export default function ReviewScreen() {
             <CountdownText remainingMs={displayRemainingMs} />
 
             {/* Pool 標籤 */}
-            <View style={styles.poolBadge}>
-              <Text style={styles.poolBadgeText}>
-                {getPoolLabel(currentWord.pool)}
-              </Text>
-            </View>
+            <PoolBadge pool={currentWord.pool} type="review" />
 
             {currentWord.image_url && (
               <Image
@@ -425,11 +395,7 @@ export default function ReviewScreen() {
         {pagePhase === "exercising" && currentExercise && currentWord && (
           <View style={styles.exerciseContainer}>
             {/* Pool 標籤 */}
-            <View style={styles.poolBadge}>
-              <Text style={styles.poolBadgeText}>
-                {getPoolLabel(currentWord.pool)}
-              </Text>
-            </View>
+            <PoolBadge pool={currentWord.pool} type="review" />
 
             {/* 題目階段：顯示單字，倒數計時 */}
             {exerciseFlow.phase === "question" && (
@@ -535,50 +501,12 @@ export default function ReviewScreen() {
             {exerciseFlow.phase === "result" && (
               <>
                 {currentExercise.type.startsWith("speaking") ? (
-                  <>
-                    {/* 口說題：使用實際比對結果來判斷正確性 */}
-                    {(() => {
-                      const isCorrect = recognizedText.trim() !== "" &&
-                        checkAnswer(recognizedText, currentWord.word);
-                      return (
-                        <>
-                          {/* 結果圖示 */}
-                          <View style={[
-                            styles.resultIconContainer,
-                            isCorrect
-                              ? styles.resultCorrect
-                              : styles.resultIncorrect
-                          ]}>
-                            {isCorrect ? (
-                              <Check size={64} color={colors.success} />
-                            ) : (
-                              <X size={64} color={colors.destructive} />
-                            )}
-                          </View>
-
-                          {/* 你說的內容 */}
-                          {recognizedText && (
-                            <View style={styles.transcriptBox}>
-                              <Text style={styles.transcriptLabel}>你說：</Text>
-                              <Text style={styles.transcriptText}>
-                                "{recognizedText}"
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* 正確答案（如果答錯） */}
-                          {!isCorrect && (
-                            <View style={styles.correctAnswerBox}>
-                              <Text style={styles.correctAnswerLabel}>正確答案：</Text>
-                              <Text style={styles.correctAnswerText}>
-                                {currentWord.word}
-                              </Text>
-                            </View>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </>
+                  <SpeakingResult
+                    isCorrect={recognizedText.trim() !== "" &&
+                      checkSpeakingAnswer(recognizedText, currentWord.word)}
+                    recognizedText={recognizedText}
+                    correctAnswer={currentWord.word}
+                  />
                 ) : (
                   <>
                     {exerciseFlow.selectedIndex === -1 && (
@@ -606,48 +534,6 @@ export default function ReviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Loading screen
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    color: colors.mutedForeground,
-    marginTop: 16,
-  },
-
-  // Complete screen
-  completeContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  completeIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: `${colors.success}33`,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  completeTitle: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 8,
-  },
-  completeSubtitle: {
-    fontSize: 18,
-    color: colors.mutedForeground,
-    textAlign: "center",
-    marginBottom: 32,
-  },
-
   // Main container
   container: {
     flex: 1,
@@ -660,20 +546,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
-  },
-
-  // Pool badge
-  poolBadge: {
-    backgroundColor: `${colors.accent}1A`,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 9999,
-    marginBottom: 16,
-  },
-  poolBadgeText: {
-    fontSize: 12,
-    color: colors.accent,
-    fontWeight: "600",
   },
 
   // Timeout text
@@ -836,41 +708,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.foreground,
     fontWeight: "500",
-  },
-
-  // Result display
-  resultIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  resultCorrect: {
-    backgroundColor: `${colors.success}33`,
-  },
-  resultIncorrect: {
-    backgroundColor: `${colors.destructive}33`,
-  },
-
-  // Correct answer display
-  correctAnswerBox: {
-    backgroundColor: `${colors.success}1A`,
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
-    width: "100%",
-  },
-  correctAnswerLabel: {
-    fontSize: 14,
-    color: colors.success,
-    marginBottom: 4,
-    fontWeight: "600",
-  },
-  correctAnswerText: {
-    fontSize: 20,
-    color: colors.success,
-    fontWeight: "bold",
   },
 });

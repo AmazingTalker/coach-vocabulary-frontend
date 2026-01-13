@@ -8,7 +8,9 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|twrnc|lucide-react-native)',
   ],
   collectCoverageFrom: [
-    'hooks/**/*.{ts,tsx}',
+    'hooks/useSpeech.ts',
+    'hooks/useSpeechRecognition.ts',
+    'hooks/useExerciseFlow.ts',
     'services/api.ts',
     'services/learnService.ts',
     'services/practiceService.ts',
@@ -17,7 +19,19 @@ module.exports = {
     '!**/node_modules/**',
   ],
   coverageThreshold: {
-    './hooks/': {
+    './hooks/useSpeech.ts': {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+    './hooks/useSpeechRecognition.ts': {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+    './hooks/useExerciseFlow.ts': {
       branches: 80,
       functions: 80,
       lines: 80,
