@@ -219,7 +219,7 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <View>
               <Text style={styles.headerTitle}>
-                Coach Vocabulary
+                One English
               </Text>
               <Text style={styles.headerSubtitle}>
                 歡迎回來，{user?.username}

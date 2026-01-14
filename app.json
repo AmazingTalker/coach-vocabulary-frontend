@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Coach Vocabulary",
+    "name": "One English",
     "slug": "coach-vocabulary-frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "coach-vocabulary",
+    "scheme": "one-english",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
