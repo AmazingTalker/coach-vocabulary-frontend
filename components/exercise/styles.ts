@@ -44,7 +44,7 @@ export const exerciseStyles = StyleSheet.create({
     backgroundColor: colors.destructive,
   },
   progressBarPrimary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
   },
   progressBarMuted: {
     backgroundColor: colors.muted,
