@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "../contexts/AuthContext";
+import { AlertProvider } from "../components/ui/Alert";
 
 export default function RootLayout() {
   // 配置音訊模式（iOS 靜音模式下仍可播放）
@@ -17,13 +18,15 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(main)" />
-        </Stack>
-      </AuthProvider>
+      <AlertProvider>
+        <AuthProvider>
+          <StatusBar style="dark" />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(main)" />
+          </Stack>
+        </AuthProvider>
+      </AlertProvider>
     </GestureHandlerRootView>
   );
 }

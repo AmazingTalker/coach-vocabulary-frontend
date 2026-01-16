@@ -3,12 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Alert,
   Image,
   StyleSheet,
   useWindowDimensions,
   ActivityIndicator,
 } from "react-native";
+import { Alert } from "../../components/ui/Alert";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
