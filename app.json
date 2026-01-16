@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "One English",
+    "name": "Attain",
     "slug": "coach-vocabulary-frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "one-english",
+    "scheme": "attain",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -14,10 +14,11 @@
       "backgroundColor": "#2db877"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "允許 $(PRODUCT_NAME) 使用語音辨識功能。",
         "NSMicrophoneUsageDescription": "允許 $(PRODUCT_NAME) 使用麥克風以進行語音辨識練習。",
+        "NSPhotoLibraryUsageDescription": "允許 $(PRODUCT_NAME) 存取您的相簿。",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.amazingtalker.aicoach"
@@ -47,6 +48,14 @@
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true
+          }
         }
       ]
     ],

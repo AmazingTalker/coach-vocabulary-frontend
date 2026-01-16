@@ -3,12 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Alert,
   Image,
   StyleSheet,
   useWindowDimensions,
   ActivityIndicator,
 } from "react-native";
+import { Alert } from "../../components/ui/Alert";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
@@ -34,6 +34,7 @@ import {
   getExerciseTitle,
   checkSpeakingAnswer,
 } from "../../utils/exerciseHelpers";
+
 
 // 頁面階段：loading | intro | exercising | speaking | complete
 // exercising = 使用 hook 管理的答題流程（閱讀/聽力題）

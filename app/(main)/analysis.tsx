@@ -4,11 +4,11 @@ import {
     Text,
     TouchableOpacity,
     ActivityIndicator,
-    Alert,
     StyleSheet,
     useWindowDimensions,
     ScrollView,
 } from "react-native";
+import { Alert } from "../../components/ui/Alert";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { analysisService } from "../../services/analysisService";

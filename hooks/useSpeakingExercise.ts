@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Alert } from "react-native";
+import { Alert } from "../components/ui/Alert";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { ExercisePhase } from "./useExerciseFlow";
 
