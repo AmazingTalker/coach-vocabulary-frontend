@@ -29,6 +29,8 @@ import {
   Bell,
   User,
   Trash2,
+  Settings,
+  ChevronLeft,
 } from "lucide-react-native";
 import { colors } from "../../lib/tw";
 import { DEBUG_MODE } from "../../lib/config";
@@ -39,6 +41,7 @@ import { BottomSheet, BottomSheetItem } from "../../components/ui/BottomSheet";
 import { DeleteAccountModal } from "../../components/ui/DeleteAccountModal";
 
 type ActionType = "review" | "practice" | "learn" | null;
+type BottomSheetStage = "main" | "account";
 
 export default function HomeScreen() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -48,6 +51,7 @@ export default function HomeScreen() {
   const [showMicModal, setShowMicModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [bottomSheetStage, setBottomSheetStage] = useState<BottomSheetStage>("main");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { user, logout, deleteAccount } = useAuth();
@@ -471,19 +475,40 @@ export default function HomeScreen() {
       {/* 帳號選單 Bottom Sheet */}
       <BottomSheet
         visible={showBottomSheet}
-        onClose={() => setShowBottomSheet(false)}
+        onClose={() => {
+          setShowBottomSheet(false);
+          setBottomSheetStage("main");
+        }}
       >
-        <BottomSheetItem
-          icon={<LogOut size={22} />}
-          label="登出"
-          onPress={handleLogout}
-          variant="destructive"
-        />
-        <BottomSheetItem
-          icon={<Trash2 size={22} />}
-          label="刪除帳號"
-          onPress={handleDeleteAccountPress}
-        />
+        {bottomSheetStage === "main" ? (
+          <>
+            <BottomSheetItem
+              icon={<Settings size={22} />}
+              label="帳號管理"
+              onPress={() => setBottomSheetStage("account")}
+            />
+            <BottomSheetItem
+              icon={<LogOut size={22} />}
+              label="登出"
+              onPress={handleLogout}
+              variant="destructive"
+            />
+          </>
+        ) : (
+          <>
+            <BottomSheetItem
+              icon={<ChevronLeft size={22} />}
+              label="返回"
+              onPress={() => setBottomSheetStage("main")}
+            />
+            <BottomSheetItem
+              icon={<Trash2 size={22} />}
+              label="刪除帳號"
+              onPress={handleDeleteAccountPress}
+              variant="destructive"
+            />
+          </>
+        )}
       </BottomSheet>
 
       {/* 刪除帳號確認 Modal */}
