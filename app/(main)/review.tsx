@@ -314,8 +314,9 @@ export default function ReviewScreen() {
   ) => {
     console.log("[Review] handleSpeakingResult called", { transcript, wordId, correctWord });
 
-    const nativeCorrect = transcript.trim() !== "" && checkSpeakingAnswer(transcript, correctWord);
-    console.log("[Review] Native recognition result:", { nativeCorrect });
+    const trimmedTranscript = transcript.trim();
+    const nativeCorrect = trimmedTranscript !== "" && checkSpeakingAnswer(trimmedTranscript, correctWord);
+    console.log("[Review] Native recognition result:", { nativeCorrect, hasTranscript: trimmedTranscript !== "" });
 
     if (nativeCorrect) {
       // 原生辨識成功，直接進入結果
@@ -326,8 +327,17 @@ export default function ReviewScreen() {
       return;
     }
 
-    // 原生辨識失敗，嘗試 Whisper 後備
-    console.log("[Review] Native failed, calling Whisper fallback...");
+    // 原生辨識有結果但不正確，直接標記為錯誤（不呼叫 Whisper）
+    if (trimmedTranscript !== "") {
+      console.log("[Review] Native detected speech but incorrect, skipping Whisper");
+      setRecognizedText(transcript);
+      setSpeakingCorrect(false);
+      exerciseFlow.enterResult(-1);
+      return;
+    }
+
+    // 原生辨識無結果，嘗試 Whisper 後備
+    console.log("[Review] Native detected nothing, calling Whisper fallback...");
     const result = await tryWhisperFallback(transcript, wordId, correctWord);
     console.log("[Review] Whisper result:", result);
 

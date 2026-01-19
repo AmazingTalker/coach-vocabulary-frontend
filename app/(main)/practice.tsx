@@ -286,8 +286,9 @@ export default function PracticeScreen() {
   ) => {
     console.log("[Practice] handleSpeakingResult called", { transcript, wordId, correctWord });
 
-    const nativeCorrect = transcript.trim() !== "" && checkSpeakingAnswer(transcript, correctWord);
-    console.log("[Practice] Native recognition result:", { nativeCorrect });
+    const trimmedTranscript = transcript.trim();
+    const nativeCorrect = trimmedTranscript !== "" && checkSpeakingAnswer(trimmedTranscript, correctWord);
+    console.log("[Practice] Native recognition result:", { nativeCorrect, hasTranscript: trimmedTranscript !== "" });
 
     if (nativeCorrect) {
       // 原生辨識成功，直接進入結果
@@ -298,8 +299,17 @@ export default function PracticeScreen() {
       return;
     }
 
-    // 原生辨識失敗，嘗試 Whisper 後備
-    console.log("[Practice] Native failed, calling Whisper fallback...");
+    // 原生辨識有結果但不正確，直接標記為錯誤（不呼叫 Whisper）
+    if (trimmedTranscript !== "") {
+      console.log("[Practice] Native detected speech but incorrect, skipping Whisper");
+      setRecognizedText(transcript);
+      setSpeakingCorrect(false);
+      exerciseFlow.enterResult(-1);
+      return;
+    }
+
+    // 原生辨識無結果，嘗試 Whisper 後備
+    console.log("[Practice] Native detected nothing, calling Whisper fallback...");
     const result = await tryWhisperFallback(transcript, wordId, correctWord);
     console.log("[Practice] Whisper result:", result);
 
