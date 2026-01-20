@@ -1,15 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Alert } from "../components/ui/Alert";
 import { useSpeechRecognition } from "./useSpeechRecognition";
-import { ExercisePhase } from "./useExerciseFlow";
+import { speechService } from "../services/speechService";
+import { checkSpeakingAnswer } from "../utils/exerciseHelpers";
+import type { ExercisePhase } from "./useExerciseFlow";
+
+interface ExerciseFlowInterface {
+  phase: ExercisePhase;
+  select: (index: number) => void;
+  clearTimer: () => void;
+  enterProcessing: () => void;
+  enterResult: (selectedIndex: number) => void;
+  startOptionsCountdown: (onTimeout?: () => void) => void;
+}
 
 interface UseSpeakingExerciseOptions {
-  exerciseFlow: {
-    phase: ExercisePhase;
-    select: (index: number) => void;
-    clearTimer: () => void;
-  };
+  exerciseFlow: ExerciseFlowInterface;
   currentWord: string | null;
+  wordId: string | null;
   exerciseType: string | null;
   pagePhase: string;
 }
@@ -17,21 +25,31 @@ interface UseSpeakingExerciseOptions {
 interface UseSpeakingExerciseReturn {
   recognizedText: string;
   isRecording: boolean;
+  isPreparingRecording: boolean;
+  isCorrect: boolean;
   speechRecognition: ReturnType<typeof useSpeechRecognition>;
   startRecording: () => Promise<void>;
   handleStopRecording: () => void;
   resetSpeaking: () => void;
-  checkAnswer: (transcript: string, correctWord: string) => boolean;
 }
 
+/**
+ * Hook for managing speaking exercise flow including:
+ * - Speech recognition (native + Whisper fallback)
+ * - Recording state management
+ * - Answer verification
+ */
 export function useSpeakingExercise({
   exerciseFlow,
   currentWord,
+  wordId,
   exerciseType,
   pagePhase,
 }: UseSpeakingExerciseOptions): UseSpeakingExerciseReturn {
   const [recognizedText, setRecognizedText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isPreparingRecording, setIsPreparingRecording] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
 
   // 語音辨識 Hook
   const speechRecognition = useSpeechRecognition({
@@ -40,34 +58,122 @@ export function useSpeakingExercise({
     continuous: true,
   });
 
-  // 比對邏輯（包含匹配）
-  const checkAnswer = useCallback(
-    (transcript: string, correctWord: string): boolean => {
-      const normalizedTranscript = transcript.toLowerCase().trim();
-      const normalizedCorrect = correctWord.toLowerCase().trim();
-      return normalizedTranscript.includes(normalizedCorrect);
+  // Refs to avoid stale closures
+  const currentWordRef = useRef(currentWord);
+  const wordIdRef = useRef(wordId);
+
+  useEffect(() => {
+    currentWordRef.current = currentWord;
+    wordIdRef.current = wordId;
+  }, [currentWord, wordId]);
+
+  // Whisper fallback verification
+  const tryWhisperFallback = useCallback(
+    async (
+      nativeTranscript: string,
+      wId: string,
+      correctWord: string
+    ): Promise<{ correct: boolean; transcript: string }> => {
+      const audioData = speechRecognition.getAudioData();
+
+      if (!audioData) {
+        return {
+          correct: checkSpeakingAnswer(nativeTranscript, correctWord),
+          transcript: nativeTranscript,
+        };
+      }
+
+      try {
+        const whisperTranscript = await speechService.transcribe(
+          audioData,
+          wId,
+          nativeTranscript
+        );
+
+        const whisperCorrect = checkSpeakingAnswer(whisperTranscript, correctWord);
+
+        if (whisperCorrect) {
+          return { correct: true, transcript: whisperTranscript };
+        }
+
+        return {
+          correct: false,
+          transcript: nativeTranscript || whisperTranscript,
+        };
+      } catch (error) {
+        console.error("Whisper fallback error:", error);
+        return {
+          correct: checkSpeakingAnswer(nativeTranscript, correctWord),
+          transcript: nativeTranscript,
+        };
+      }
     },
-    []
+    [speechRecognition.getAudioData]
+  );
+
+  // Handle speaking result with optional Whisper fallback
+  const handleSpeakingResult = useCallback(
+    async (transcript: string, wId: string, correctWord: string) => {
+      const trimmedTranscript = transcript.trim();
+      const nativeCorrect =
+        trimmedTranscript !== "" &&
+        checkSpeakingAnswer(trimmedTranscript, correctWord);
+
+      if (nativeCorrect) {
+        setRecognizedText(transcript);
+        setIsCorrect(true);
+        exerciseFlow.enterResult(0);
+        return;
+      }
+
+      // Native has result but incorrect - skip Whisper
+      if (trimmedTranscript !== "") {
+        setRecognizedText(transcript);
+        setIsCorrect(false);
+        exerciseFlow.enterResult(-1);
+        return;
+      }
+
+      // Native has no result - try Whisper fallback
+      const result = await tryWhisperFallback(transcript, wId, correctWord);
+      setRecognizedText(result.transcript);
+      setIsCorrect(result.correct);
+      exerciseFlow.enterResult(result.correct ? 0 : -1);
+    },
+    [tryWhisperFallback, exerciseFlow]
   );
 
   // 重置口說狀態
   const resetSpeaking = useCallback(() => {
     setRecognizedText("");
     setIsRecording(false);
+    setIsPreparingRecording(false);
+    setIsCorrect(false);
     speechRecognition.reset();
   }, [speechRecognition]);
 
   // 錄音函數
   const startRecording = useCallback(async () => {
+    setIsPreparingRecording(true);
+
     if (!speechRecognition.isSupported) {
+      setIsPreparingRecording(false);
       Alert.alert("不支援", "此裝置不支援語音辨識功能");
       exerciseFlow.select(-1);
       return;
     }
 
-    const success = await speechRecognition.start();
+    const success = await speechRecognition.start({
+      contextualStrings: currentWord ? [currentWord] : undefined,
+    });
+    setIsPreparingRecording(false);
+
     if (success) {
       setIsRecording(true);
+      // Start options countdown with custom timeout handler
+      exerciseFlow.startOptionsCountdown(() => {
+        exerciseFlow.enterProcessing();
+      });
     } else {
       Alert.alert(
         "無法啟動",
@@ -75,34 +181,30 @@ export function useSpeakingExercise({
       );
       exerciseFlow.select(-1);
     }
-  }, [speechRecognition, exerciseFlow]);
+  }, [speechRecognition, currentWord, exerciseFlow]);
 
   // 停止錄音
   const handleStopRecording = useCallback(() => {
-    if (isRecording) {
-      exerciseFlow.clearTimer();
+    if (isRecording && exerciseFlow.phase === "options") {
+      exerciseFlow.enterProcessing();
 
       const transcript =
         speechRecognition.finalTranscript || speechRecognition.interimTranscript;
 
-      if (transcript && currentWord) {
-        setRecognizedText(transcript);
-        const correct = checkAnswer(transcript, currentWord);
-        exerciseFlow.select(correct ? 0 : -1);
-      } else {
-        exerciseFlow.select(-1);
-      }
-
       speechRecognition.abort();
       setIsRecording(false);
+
+      if (currentWordRef.current && wordIdRef.current) {
+        handleSpeakingResult(
+          transcript || "",
+          wordIdRef.current,
+          currentWordRef.current
+        );
+      } else {
+        exerciseFlow.enterResult(-1);
+      }
     }
-  }, [
-    isRecording,
-    exerciseFlow,
-    speechRecognition,
-    currentWord,
-    checkAnswer,
-  ]);
+  }, [isRecording, exerciseFlow, speechRecognition, handleSpeakingResult]);
 
   // 口說題：進入 options 階段自動開始錄音
   useEffect(() => {
@@ -110,37 +212,42 @@ export function useSpeakingExercise({
       pagePhase === "exercising" &&
       exerciseFlow.phase === "options" &&
       exerciseType?.startsWith("speaking") &&
-      !isRecording
+      !isRecording &&
+      !isPreparingRecording
     ) {
       startRecording();
     }
-  }, [pagePhase, exerciseFlow.phase, exerciseType, isRecording, startRecording]);
+  }, [pagePhase, exerciseFlow.phase, exerciseType, isRecording, isPreparingRecording, startRecording]);
 
-  // 口說題：超時時檢查是否有已辨識的內容
+  // 口說題：超時處理（進入 processing 階段但還在錄音中）
   useEffect(() => {
     if (
       pagePhase === "exercising" &&
-      exerciseFlow.phase === "result" &&
+      exerciseFlow.phase === "processing" &&
       exerciseType?.startsWith("speaking") &&
       isRecording
     ) {
       const transcript =
         speechRecognition.finalTranscript || speechRecognition.interimTranscript;
 
-      if (transcript) {
-        setRecognizedText(transcript);
-      }
-
       speechRecognition.abort();
       setIsRecording(false);
+
+      if (currentWordRef.current && wordIdRef.current) {
+        handleSpeakingResult(
+          transcript || "",
+          wordIdRef.current,
+          currentWordRef.current
+        );
+      }
     }
   }, [
     pagePhase,
     exerciseFlow.phase,
     exerciseType,
     isRecording,
-    speechRecognition.finalTranscript,
-    speechRecognition.interimTranscript,
+    speechRecognition,
+    handleSpeakingResult,
   ]);
 
   // 監聽辨識完成並自動提交答案
@@ -151,31 +258,39 @@ export function useSpeakingExercise({
       pagePhase === "exercising" &&
       exerciseFlow.phase === "options" &&
       currentWord &&
+      wordId &&
       isRecording
     ) {
-      setIsRecording(false);
-      setRecognizedText(speechRecognition.finalTranscript);
+      exerciseFlow.enterProcessing();
 
-      const correct = checkAnswer(speechRecognition.finalTranscript, currentWord);
-      exerciseFlow.select(correct ? 0 : -1);
+      speechRecognition.abort();
+      setIsRecording(false);
+
+      handleSpeakingResult(
+        speechRecognition.finalTranscript,
+        wordId,
+        currentWord
+      );
     }
   }, [
     speechRecognition.finalTranscript,
     exerciseType,
     pagePhase,
-    exerciseFlow.phase,
+    exerciseFlow,
     currentWord,
+    wordId,
     isRecording,
-    checkAnswer,
+    handleSpeakingResult,
   ]);
 
   return {
     recognizedText,
     isRecording,
+    isPreparingRecording,
+    isCorrect,
     speechRecognition,
     startRecording,
     handleStopRecording,
     resetSpeaking,
-    checkAnswer,
   };
 }

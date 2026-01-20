@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   Image,
-  StyleSheet,
   useWindowDimensions,
 } from "react-native";
 import { Alert } from "../../components/ui/Alert";
@@ -25,6 +24,7 @@ import {
   ExerciseComplete,
 } from "../../components/exercise";
 import { useExerciseFlow } from "../../hooks/useExerciseFlow";
+import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
 
 type PagePhase = "loading" | "display" | "exercising" | "complete";
 
@@ -208,10 +208,10 @@ export default function LearnScreen() {
       />
 
       {/* Content */}
-      <View style={[styles.content, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
+      <View style={[styles.contentContainer, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
         {/* 展示階段：顯示單字和翻譯 */}
         {pagePhase === "display" && currentWord && (
-          <View style={styles.displayContent}>
+          <View style={styles.displayContainer}>
             {/* 倒數計時 */}
             <CountdownText remainingMs={displayRemainingMs} />
 
@@ -249,7 +249,7 @@ export default function LearnScreen() {
 
         {/* 答題階段 */}
         {pagePhase === "exercising" && currentExercise && currentWord && (
-          <View style={styles.exerciseContent}>
+          <View style={styles.exerciseContainer}>
             {/* 題目階段：顯示單字，倒數計時 */}
             {exerciseFlow.phase === "question" && (
               <>
@@ -257,7 +257,7 @@ export default function LearnScreen() {
                 <Text style={styles.exerciseWordText}>
                   {currentWord.word}
                 </Text>
-                <Text style={styles.exerciseInstructions}>
+                <Text style={styles.exerciseHintText}>
                   準備作答...
                 </Text>
               </>
@@ -304,74 +304,3 @@ export default function LearnScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  // Main container
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  // Content
-  content: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-
-  // Display phase
-  displayContent: {
-    alignItems: "center",
-  },
-  wordImage: {
-    width: 160,
-    height: 160,
-    borderRadius: 16,
-    backgroundColor: colors.muted,
-    marginBottom: 24,
-  },
-  wordText: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 8,
-  },
-  translationText: {
-    fontSize: 24,
-    color: colors.mutedForeground,
-    marginBottom: 16,
-  },
-  audioStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 16,
-  },
-  audioStatusText: {
-    color: colors.mutedForeground,
-    marginLeft: 8,
-  },
-
-  // Exercise phase
-  exerciseContent: {
-    width: "100%",
-    alignItems: "center",
-  },
-  exerciseWordText: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 8,
-  },
-  exerciseInstructions: {
-    fontSize: 16,
-    color: colors.mutedForeground,
-    marginBottom: 32,
-  },
-  timeoutText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.destructive,
-    marginTop: 16,
-  },
-});

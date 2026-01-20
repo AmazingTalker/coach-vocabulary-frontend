@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   Image,
-  StyleSheet,
   useWindowDimensions,
   ActivityIndicator,
 } from "react-native";
@@ -35,6 +34,7 @@ import {
   getExerciseTitle,
   checkSpeakingAnswer,
 } from "../../utils/exerciseHelpers";
+import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
 
 
 // 頁面階段：loading | intro | exercising | speaking | complete
@@ -476,7 +476,7 @@ export default function PracticeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.mainContainer}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <ExerciseHeader
         title="練習中"
@@ -660,186 +660,3 @@ export default function PracticeScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  // Intro screen
-  introContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  introTitle: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 16,
-  },
-  introSubtitle: {
-    fontSize: 18,
-    color: colors.mutedForeground,
-    textAlign: "center",
-    marginBottom: 32,
-  },
-
-  // Common buttons
-  primaryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-  },
-  primaryButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.primaryForeground,
-  },
-
-  // Main exercise screen
-  mainContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  // Content
-  contentContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  exerciseContainer: {
-    width: "100%",
-    alignItems: "center",
-  },
-
-  // Timeout text
-  timeoutText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.destructive,
-    marginBottom: 16,
-  },
-
-  // Reading exercise
-  readingWord: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 8,
-  },
-  readingInstruction: {
-    fontSize: 16,
-    color: colors.mutedForeground,
-    marginBottom: 32,
-  },
-
-  // Listening exercise
-  listeningContainer: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  listeningButton: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: `${colors.primary}1A`,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  listeningText: {
-    fontSize: 16,
-    color: colors.mutedForeground,
-  },
-
-  // 準備錄音中
-  preparingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 48,
-  },
-  preparingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.mutedForeground,
-  },
-
-  // Speaking exercise
-  speakingImage: {
-    width: 128,
-    height: 128,
-    borderRadius: 16,
-    backgroundColor: colors.muted,
-    marginBottom: 16,
-  },
-  speakingWord: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: colors.foreground,
-    marginBottom: 8,
-  },
-  speakingInstruction: {
-    fontSize: 16,
-    color: colors.mutedForeground,
-    marginBottom: 16,
-  },
-
-  // 錄音容器
-  recordingContainer: {
-    alignItems: "center",
-    marginVertical: 24,
-  },
-
-  // 麥克風按鈕
-  micButton: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: `${colors.primary}1A`,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  micButtonActive: {
-    backgroundColor: `${colors.destructive}33`,
-  },
-
-  // 錄音中指示器
-  recordingIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-  },
-  recordingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.destructive,
-    marginRight: 8,
-  },
-  recordingText: {
-    fontSize: 14,
-    color: colors.destructive,
-    fontWeight: "500",
-  },
-
-  // 辨識結果顯示
-  transcriptBox: {
-    backgroundColor: colors.muted,
-    padding: 16,
-    borderRadius: 12,
-    marginVertical: 16,
-    width: "100%",
-  },
-  transcriptLabel: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    marginBottom: 4,
-  },
-  transcriptText: {
-    fontSize: 18,
-    color: colors.foreground,
-    fontWeight: "500",
-  },
-});
