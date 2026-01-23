@@ -135,6 +135,7 @@ export interface LearnCompleteResponse {
   success: boolean;
   words_moved: number;
   today_learned: number;
+  next_available_time?: string;
 }
 
 // === Practice ===
@@ -156,6 +157,7 @@ export interface PracticeSubmitResponse {
     correct_count: number;
     incorrect_count: number;
   };
+  next_available_time?: string;
 }
 
 // === Review ===
@@ -175,6 +177,7 @@ export interface ReviewCompleteResponse {
   success: boolean;
   words_completed: number;
   next_practice_time: string;
+  next_available_time?: string;
 }
 
 // === Admin ===

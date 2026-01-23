@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
 import { handleApiError, getAssetUrl } from "../../services/api";
 import { trackingService } from "../../services/trackingService";
+import { notificationService } from "../../services/notificationService";
 import type { PracticeSessionResponse, AnswerSchema } from "../../types/api";
 import { useSpeech } from "../../hooks/useSpeech";
 import { useSpeakingExercise } from "../../hooks/useSpeakingExercise";
@@ -246,7 +247,8 @@ export default function PracticeScreen() {
     trackingService.exerciseComplete("practice", totalExercises, correctCount, durationMs);
 
     try {
-      await practiceService.submit(answersRef.current);
+      const response = await practiceService.submit(answersRef.current);
+      notificationService.scheduleNextSessionNotification(response.next_available_time ?? null);
     } catch (error) {
       console.error("Submit practice error:", error);
     }

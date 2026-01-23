@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { learnService } from "../../services/learnService";
 import { handleApiError, getAssetUrl } from "../../services/api";
 import { trackingService } from "../../services/trackingService";
+import { notificationService } from "../../services/notificationService";
 import type { LearnSessionResponse, AnswerSchema } from "../../types/api";
 import { Volume2 } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
@@ -193,7 +194,8 @@ export default function LearnScreen() {
 
     try {
       const wordIds = session.words.map((w) => w.id);
-      await learnService.complete(wordIds, answersRef.current);
+      const response = await learnService.complete(wordIds, answersRef.current);
+      notificationService.scheduleNextSessionNotification(response.next_available_time ?? null);
     } catch (error) {
       console.error("Complete session error:", error);
     }
