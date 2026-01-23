@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { reviewService } from "../../services/reviewService";
 import { handleApiError, getAssetUrl } from "../../services/api";
+import { trackingService } from "../../services/trackingService";
 import type { ReviewSessionResponse, AnswerSchema } from "../../types/api";
 import { Volume2 } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
@@ -56,6 +57,7 @@ export default function ReviewScreen() {
 
   const displayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answersRef = useRef<AnswerSchema[]>([]);
+  const sessionStartTimeRef = useRef<number>(Date.now());
 
   const words = session?.words || [];
   const exercises = session?.exercises || [];
@@ -96,7 +98,18 @@ export default function ReviewScreen() {
   };
 
   // 使用共用的答題流程 Hook
-  const exerciseFlow = useExerciseFlow({}, () => {
+  const exerciseFlow = useExerciseFlow({
+    onQuestionShown: () => {
+      if (currentWord && currentExercise) {
+        trackingService.questionShown("review", currentWord.id, currentExercise.type, currentIndex);
+      }
+    },
+    onAnswerPhaseStarted: () => {
+      if (currentWord && currentExercise) {
+        trackingService.answerPhaseStarted("review", currentWord.id, currentExercise.type);
+      }
+    },
+  }, () => {
     // 記錄答案
     if (currentWord && currentExercise) {
       let correct = false;
@@ -127,6 +140,15 @@ export default function ReviewScreen() {
       };
       setAnswers((prev) => [...prev, newAnswer]);
       answersRef.current = [...answersRef.current, newAnswer];
+
+      // 追蹤答題
+      trackingService.exerciseAnswer(
+        "review",
+        currentWord.id,
+        currentExercise.type,
+        correct,
+        responseTimeMs
+      );
     }
 
     goToNext();
@@ -139,6 +161,21 @@ export default function ReviewScreen() {
     wordId: currentWord?.id || null,
     exerciseType: currentExercise?.type || null,
     pagePhase,
+    onRecordingStarted: () => {
+      if (currentWord) {
+        trackingService.recordingStarted("review", currentWord.id);
+      }
+    },
+    onRecordingStopped: (stopReason) => {
+      if (currentWord) {
+        trackingService.recordingStopped("review", currentWord.id, stopReason);
+      }
+    },
+    onSpeechRecognized: (recognizedText, isMatch) => {
+      if (currentWord) {
+        trackingService.speechRecognized("review", currentWord.id, recognizedText, isMatch);
+      }
+    },
   });
 
   // 載入複習 Session
@@ -177,6 +214,10 @@ export default function ReviewScreen() {
           setCurrentExerciseType(getExerciseCategory(sortedExercises[0].type));
           setPagePhase("intro");
         }
+
+        // 追蹤複習開始
+        sessionStartTimeRef.current = Date.now();
+        trackingService.exerciseStart("review", sortedWords.length);
       } catch (error) {
         Alert.alert("載入失敗", handleApiError(error), [
           { text: "返回", onPress: () => router.back() },
@@ -193,6 +234,8 @@ export default function ReviewScreen() {
     if (pagePhase === "display" && currentWord) {
       // 播放音檔
       speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+      // 追蹤：音檔播放
+      trackingService.audioPlayed("review", currentWord.id, "auto");
 
       // 重置倒數
       const start = Date.now();
@@ -223,6 +266,8 @@ export default function ReviewScreen() {
       currentWord
     ) {
       speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+      // 追蹤：音檔播放
+      trackingService.audioPlayed("review", currentWord.id, "auto");
     }
   }, [pagePhase, exerciseFlow.phase, currentExercise, currentWord, speak]);
 
@@ -243,6 +288,11 @@ export default function ReviewScreen() {
   const completeSession = async () => {
     setPagePhase("complete");
 
+    // 追蹤複習完成
+    const durationMs = Date.now() - sessionStartTimeRef.current;
+    const correctCount = answersRef.current.filter((a) => a.correct).length;
+    trackingService.exerciseComplete("review", totalWords, correctCount, durationMs);
+
     try {
       const wordIds = words.map((w) => w.id);
       await reviewService.complete(wordIds, answersRef.current);
@@ -260,7 +310,16 @@ export default function ReviewScreen() {
     }
     Alert.alert("確定離開？", "複習進度將不會保存", [
       { text: "取消", style: "cancel" },
-      { text: "離開", style: "destructive", onPress: () => router.back() },
+      {
+        text: "離開",
+        style: "destructive",
+        onPress: () => {
+          // 追蹤複習放棄
+          const durationMs = Date.now() - sessionStartTimeRef.current;
+          trackingService.exerciseAbandon("review", currentIndex, totalWords, durationMs);
+          router.back();
+        },
+      },
     ]);
   };
 

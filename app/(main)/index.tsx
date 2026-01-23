@@ -16,6 +16,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { homeService } from "../../services/homeService";
 import { adminService } from "../../services/adminService";
 import { handleApiError } from "../../services/api";
+import { trackingService } from "../../services/trackingService";
 import type { StatsResponse } from "../../types/api";
 import {
   BookOpen,
@@ -91,6 +92,9 @@ export default function HomeScreen() {
     }
     setShowMicModal(false);
 
+    // 追蹤權限回應
+    trackingService.permissionResponse("microphone", granted ? "granted" : "denied");
+
     // Check if we should show notification modal next
     const shouldShowNotif =
       await permissionService.shouldShowNotificationPermissionPrompt();
@@ -102,6 +106,9 @@ export default function HomeScreen() {
   const handleMicModalDismiss = async () => {
     await permissionService.recordMicPermissionDismissal();
     setShowMicModal(false);
+
+    // 追蹤權限回應
+    trackingService.permissionResponse("microphone", "dismissed");
 
     // Still check notification modal
     const shouldShowNotif =
@@ -118,11 +125,17 @@ export default function HomeScreen() {
       await permissionService.recordNotificationPermissionGranted();
     }
     setShowNotificationModal(false);
+
+    // 追蹤權限回應
+    trackingService.permissionResponse("notification", granted ? "granted" : "denied");
   };
 
   const handleNotificationModalDismiss = async () => {
     await permissionService.recordNotificationPermissionDismissal();
     setShowNotificationModal(false);
+
+    // 追蹤權限回應
+    trackingService.permissionResponse("notification", "dismissed");
   };
 
   const fetchStats = useCallback(async () => {
@@ -200,6 +213,12 @@ export default function HomeScreen() {
 
   const handleStartAction = () => {
     const action = getNextAction();
+
+    // 追蹤按鈕點擊
+    if (action) {
+      trackingService.buttonTap(`start_${action}`, "home");
+    }
+
     switch (action) {
       case "analysis":
         router.push("/(main)/analysis");

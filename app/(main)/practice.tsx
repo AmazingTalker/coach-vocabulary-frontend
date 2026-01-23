@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
 import { handleApiError, getAssetUrl } from "../../services/api";
+import { trackingService } from "../../services/trackingService";
 import type { PracticeSessionResponse, AnswerSchema } from "../../types/api";
 import { useSpeech } from "../../hooks/useSpeech";
 import { useSpeakingExercise } from "../../hooks/useSpeakingExercise";
@@ -60,6 +61,7 @@ export default function PracticeScreen() {
 
   // 用來記錄當前答案
   const answersRef = useRef<AnswerSchema[]>([]);
+  const sessionStartTimeRef = useRef<number>(Date.now());
 
   // 進入下一題
   const goToNextExercise = useCallback(() => {
@@ -89,7 +91,18 @@ export default function PracticeScreen() {
   }, [currentIndex, totalExercises, exercises, currentExerciseType]);
 
   // 使用共用的答題流程 Hook（閱讀/聽力/口說題）
-  const exerciseFlow = useExerciseFlow({}, () => {
+  const exerciseFlow = useExerciseFlow({
+    onQuestionShown: () => {
+      if (currentExercise) {
+        trackingService.questionShown("practice", currentExercise.word_id, currentExercise.type, currentIndex);
+      }
+    },
+    onAnswerPhaseStarted: () => {
+      if (currentExercise) {
+        trackingService.answerPhaseStarted("practice", currentExercise.word_id, currentExercise.type);
+      }
+    },
+  }, () => {
     // 記錄答案
     if (currentExercise) {
       let correct = false;
@@ -120,6 +133,15 @@ export default function PracticeScreen() {
       };
       setAnswers((prev) => [...prev, newAnswer]);
       answersRef.current = [...answersRef.current, newAnswer];
+
+      // 追蹤答題
+      trackingService.exerciseAnswer(
+        "practice",
+        currentExercise.word_id,
+        currentExercise.type,
+        correct,
+        responseTimeMs
+      );
     }
 
     goToNextExercise();
@@ -132,6 +154,21 @@ export default function PracticeScreen() {
     wordId: currentExercise?.word_id || null,
     exerciseType: currentExercise?.type || null,
     pagePhase,
+    onRecordingStarted: () => {
+      if (currentExercise) {
+        trackingService.recordingStarted("practice", currentExercise.word_id);
+      }
+    },
+    onRecordingStopped: (stopReason) => {
+      if (currentExercise) {
+        trackingService.recordingStopped("practice", currentExercise.word_id, stopReason);
+      }
+    },
+    onSpeechRecognized: (recognizedText, isMatch) => {
+      if (currentExercise) {
+        trackingService.speechRecognized("practice", currentExercise.word_id, recognizedText, isMatch);
+      }
+    },
   });
 
   // 載入練習 Session
@@ -165,6 +202,10 @@ export default function PracticeScreen() {
           setCurrentExerciseType(getExerciseCategory(sortedExercises[0].type));
           setPagePhase("intro");
         }
+
+        // 追蹤練習開始
+        sessionStartTimeRef.current = Date.now();
+        trackingService.exerciseStart("practice", sortedExercises.length);
       } catch (error) {
         Alert.alert("載入失敗", handleApiError(error), [
           { text: "返回", onPress: () => router.back() },
@@ -182,6 +223,8 @@ export default function PracticeScreen() {
       currentExercise?.type.startsWith("listening")
     ) {
       speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
+      // 追蹤：音檔播放
+      trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
     }
   }, [pagePhase, exerciseFlow.phase, currentExercise, speak]);
 
@@ -196,6 +239,11 @@ export default function PracticeScreen() {
   // 完成練習
   const completeSession = async () => {
     setPagePhase("complete");
+
+    // 追蹤練習完成
+    const durationMs = Date.now() - sessionStartTimeRef.current;
+    const correctCount = answersRef.current.filter((a) => a.correct).length;
+    trackingService.exerciseComplete("practice", totalExercises, correctCount, durationMs);
 
     try {
       await practiceService.submit(answersRef.current);
@@ -212,7 +260,16 @@ export default function PracticeScreen() {
     }
     Alert.alert("確定離開？", "練習進度將不會保存", [
       { text: "取消", style: "cancel" },
-      { text: "離開", style: "destructive", onPress: () => router.back() },
+      {
+        text: "離開",
+        style: "destructive",
+        onPress: () => {
+          // 追蹤練習放棄
+          const durationMs = Date.now() - sessionStartTimeRef.current;
+          trackingService.exerciseAbandon("practice", currentIndex, totalExercises, durationMs);
+          router.back();
+        },
+      },
     ]);
   };
 

@@ -233,6 +233,29 @@ export interface SpeechTranscribeResponse {
   error?: string;
 }
 
+// === Tracking ===
+export type TrackingPlatform = "ios" | "android" | "web";
+
+export type TrackingEventType =
+  | "screen_view"
+  | "action"
+  | "exercise"
+  | "error"
+  | "session";
+
+export interface TrackingEvent {
+  device_id: string;
+  user_id?: string;
+  session_id: string;
+  exercise_session_id?: string;
+  event_type: TrackingEventType;
+  event_name: string;
+  properties?: Record<string, unknown>;
+  timestamp: string;
+  app_version: string;
+  platform: TrackingPlatform;
+}
+
 // === Helpers ===
 export function getExerciseCategory(type: ExerciseType): ExerciseCategory {
   if (type.startsWith("reading")) return "reading";

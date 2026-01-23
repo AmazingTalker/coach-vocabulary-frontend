@@ -23,6 +23,10 @@ interface UseSpeakingExerciseOptions {
   wordId: string | null;
   exerciseType: string | null;
   pagePhase: string;
+  // 追蹤用回調
+  onRecordingStarted?: () => void;
+  onRecordingStopped?: (stopReason: "correct_match" | "timeout" | "manual") => void;
+  onSpeechRecognized?: (recognizedText: string, isMatch: boolean) => void;
 }
 
 interface UseSpeakingExerciseReturn {
@@ -48,6 +52,9 @@ export function useSpeakingExercise({
   wordId,
   exerciseType,
   pagePhase,
+  onRecordingStarted,
+  onRecordingStopped,
+  onSpeechRecognized,
 }: UseSpeakingExerciseOptions): UseSpeakingExerciseReturn {
   const [recognizedText, setRecognizedText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -141,7 +148,12 @@ export function useSpeakingExercise({
 
   // Handle speaking result with optional Whisper fallback
   const handleSpeakingResult = useCallback(
-    async (transcript: string, wId: string, correctWord: string) => {
+    async (
+      transcript: string,
+      wId: string,
+      correctWord: string,
+      stopReason: "correct_match" | "timeout" | "manual"
+    ) => {
       const trimmedTranscript = transcript.trim();
       const nativeCorrect =
         trimmedTranscript !== "" &&
@@ -150,6 +162,10 @@ export function useSpeakingExercise({
       if (nativeCorrect) {
         setRecognizedText(transcript);
         setIsCorrect(true);
+        // 追蹤：語音辨識結果
+        onSpeechRecognized?.(transcript, true);
+        // 追蹤：錄音結束（正確配對）
+        onRecordingStopped?.("correct_match");
         exerciseFlow.enterResult(0);
         return;
       }
@@ -158,6 +174,10 @@ export function useSpeakingExercise({
       if (trimmedTranscript !== "") {
         setRecognizedText(transcript);
         setIsCorrect(false);
+        // 追蹤：語音辨識結果
+        onSpeechRecognized?.(transcript, false);
+        // 追蹤：錄音結束
+        onRecordingStopped?.(stopReason);
         exerciseFlow.enterResult(-1);
         return;
       }
@@ -166,9 +186,13 @@ export function useSpeakingExercise({
       const result = await tryWhisperFallback(transcript, wId, correctWord);
       setRecognizedText(result.transcript);
       setIsCorrect(result.correct);
+      // 追蹤：語音辨識結果
+      onSpeechRecognized?.(result.transcript, result.correct);
+      // 追蹤：錄音結束
+      onRecordingStopped?.(result.correct ? "correct_match" : stopReason);
       exerciseFlow.enterResult(result.correct ? 0 : -1);
     },
-    [tryWhisperFallback, exerciseFlow]
+    [tryWhisperFallback, exerciseFlow, onSpeechRecognized, onRecordingStopped]
   );
 
   // 重置口說狀態
@@ -198,6 +222,8 @@ export function useSpeakingExercise({
 
     if (success) {
       setIsRecording(true);
+      // 追蹤：錄音開始
+      onRecordingStarted?.();
       // Start options countdown with custom timeout handler
       exerciseFlow.startOptionsCountdown(() => {
         exerciseFlow.enterProcessing();
@@ -226,7 +252,8 @@ export function useSpeakingExercise({
         handleSpeakingResult(
           transcript || "",
           wordIdRef.current,
-          currentWordRef.current
+          currentWordRef.current,
+          "manual"
         );
       } else {
         exerciseFlow.enterResult(-1);
@@ -265,7 +292,8 @@ export function useSpeakingExercise({
         handleSpeakingResult(
           transcript || "",
           wordIdRef.current,
-          currentWordRef.current
+          currentWordRef.current,
+          "timeout"
         );
       }
     }
@@ -294,10 +322,13 @@ export function useSpeakingExercise({
       speechRecognition.abort();
       setIsRecording(false);
 
+      // stopReason 會在 handleSpeakingResult 中根據結果決定
+      // 如果正確會是 "correct_match"，否則是 "manual"（因為是自動提交）
       handleSpeakingResult(
         speechRecognition.finalTranscript,
         wordId,
-        currentWord
+        currentWord,
+        "correct_match" // 自動提交時預設為 correct_match，實際會在 handleSpeakingResult 中判斷
       );
     }
   }, [

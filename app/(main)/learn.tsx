@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { learnService } from "../../services/learnService";
 import { handleApiError, getAssetUrl } from "../../services/api";
+import { trackingService } from "../../services/trackingService";
 import type { LearnSessionResponse, AnswerSchema } from "../../types/api";
 import { Volume2 } from "lucide-react-native";
 import { useSpeech } from "../../hooks/useSpeech";
@@ -47,6 +48,7 @@ export default function LearnScreen() {
 
   const displayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answersRef = useRef<AnswerSchema[]>([]);
+  const sessionStartTimeRef = useRef<number>(Date.now());
 
   const currentWord = session?.words[currentIndex];
   const currentExercise = session?.exercises[currentIndex];
@@ -65,7 +67,18 @@ export default function LearnScreen() {
   };
 
   // 使用共用的答題流程 Hook
-  const exerciseFlow = useExerciseFlow({}, () => {
+  const exerciseFlow = useExerciseFlow({
+    onQuestionShown: () => {
+      if (currentWord && currentExercise) {
+        trackingService.questionShown("learn", currentWord.id, currentExercise.type, currentIndex);
+      }
+    },
+    onAnswerPhaseStarted: () => {
+      if (currentWord && currentExercise) {
+        trackingService.answerPhaseStarted("learn", currentWord.id, currentExercise.type);
+      }
+    },
+  }, () => {
     // 記錄答案
     if (currentWord && currentExercise) {
       // 計算回答時間（超時時也記錄實際時間）
@@ -89,6 +102,15 @@ export default function LearnScreen() {
       };
       setAnswers((prev) => [...prev, newAnswer]);
       answersRef.current = [...answersRef.current, newAnswer];
+
+      // 追蹤答題
+      trackingService.exerciseAnswer(
+        "learn",
+        currentWord.id,
+        currentExercise.type,
+        correct,
+        responseTimeMs
+      );
     }
 
     goToNext();
@@ -115,6 +137,10 @@ export default function LearnScreen() {
         }
         setSession(data);
         setPagePhase("display");
+
+        // 追蹤練習開始
+        sessionStartTimeRef.current = Date.now();
+        trackingService.exerciseStart("learn", data.words.length);
       } catch (error) {
         Alert.alert("載入失敗", handleApiError(error), [
           { text: "返回", onPress: () => router.back() },
@@ -131,6 +157,8 @@ export default function LearnScreen() {
     if (pagePhase === "display" && currentWord) {
       // 播放音檔
       speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+      // 追蹤：音檔播放
+      trackingService.audioPlayed("learn", currentWord.id, "auto");
 
       // 重置倒數
       const start = Date.now();
@@ -158,6 +186,11 @@ export default function LearnScreen() {
   const completeSession = async () => {
     if (!session) return;
 
+    // 追蹤練習完成
+    const durationMs = Date.now() - sessionStartTimeRef.current;
+    const correctCount = answersRef.current.filter((a) => a.correct).length;
+    trackingService.exerciseComplete("learn", session.words.length, correctCount, durationMs);
+
     try {
       const wordIds = session.words.map((w) => w.id);
       await learnService.complete(wordIds, answersRef.current);
@@ -172,7 +205,16 @@ export default function LearnScreen() {
     exerciseFlow.clearTimer();
     Alert.alert("確定離開？", "學習進度將不會保存", [
       { text: "取消", style: "cancel" },
-      { text: "離開", style: "destructive", onPress: () => router.back() },
+      {
+        text: "離開",
+        style: "destructive",
+        onPress: () => {
+          // 追蹤練習放棄
+          const durationMs = Date.now() - sessionStartTimeRef.current;
+          trackingService.exerciseAbandon("learn", currentIndex, totalWords, durationMs);
+          router.back();
+        },
+      },
     ]);
   };
 
