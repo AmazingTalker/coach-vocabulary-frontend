@@ -42,6 +42,7 @@ import { permissionService } from "../../services/permissionService";
 import { PermissionModal } from "../../components/ui/PermissionModal";
 import { BottomSheet, BottomSheetItem } from "../../components/ui/BottomSheet";
 import { DeleteAccountModal } from "../../components/ui/DeleteAccountModal";
+import { refreshSignal } from "../../utils/refreshSignal";
 
 type ActionType = "review" | "practice" | "learn" | "tutorial" | null;
 type BottomSheetStage = "main" | "account";
@@ -165,6 +166,14 @@ export default function HomeScreen() {
       setIsLoading(false);
     };
     loadData();
+  }, [fetchStats]);
+
+  // 訂閱刷新信號（通知點擊時觸發）
+  useEffect(() => {
+    const unsubscribe = refreshSignal.subscribe(() => {
+      fetchStats();
+    });
+    return unsubscribe;
   }, [fetchStats]);
 
   const onRefresh = async () => {

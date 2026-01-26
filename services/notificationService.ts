@@ -4,6 +4,24 @@ import { Platform } from "react-native";
 // Platforms where notifications are disabled
 const DISABLED_PLATFORMS: string[] = ["web"];
 
+// Android notification channel ID
+const CHANNEL_ID = "practice-reminders";
+
+/**
+ * 確保 Android 通知頻道已建立
+ * Android 8.0+ (API 26+) 需要通知頻道才能顯示通知
+ */
+async function ensureNotificationChannel() {
+    if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+            name: "練習提醒",
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: "#FF6B35",
+        });
+    }
+}
+
 // If iOS needs to be disabled, app.json needs to be updated with 
 // "ios": {
 //   "entitlements": {
@@ -77,7 +95,10 @@ export const notificationService = {
             return;
         }
 
-        // 2. 預約新的通知
+        // 2. 確保 Android 通知頻道已建立
+        await ensureNotificationChannel();
+
+        // 3. 預約新的通知
         try {
             await Notifications.scheduleNotificationAsync({
                 content: {
@@ -88,6 +109,7 @@ export const notificationService = {
                 trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,
                     date: triggerDate,
+                    channelId: Platform.OS === "android" ? CHANNEL_ID : undefined,
                 },
             });
             console.log(`Notification scheduled for: ${triggerDate.toLocaleString()}`);
