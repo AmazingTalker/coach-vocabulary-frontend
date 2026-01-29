@@ -44,6 +44,12 @@ const EXERCISE_SUBTITLES: Record<string, string> = {
   speaking: "看翻譯，說出正確的單字",
 };
 
+const EXERCISE_STEPS: Record<string, string[]> = {
+  reading: ["看英文單字，回想意思", "選出正確的翻譯或圖片"],
+  listening: ["聆聽單字發音，回想意思", "選出正確的翻譯或圖片"],
+  speaking: ["看中文翻譯或圖片，回想英文單字", "說出正確的英文單字"],
+};
+
 export default function PracticeScreen() {
   const router = useRouter();
   const { speak, isSpeaking } = useSpeech();
@@ -436,6 +442,7 @@ export default function PracticeScreen() {
       <IntroScreen
         title={getExerciseTitle(currentExerciseType)}
         subtitle={EXERCISE_SUBTITLES[currentExerciseType] || ""}
+        steps={EXERCISE_STEPS[currentExerciseType]}
         onStart={startExercise}
       />
     );
