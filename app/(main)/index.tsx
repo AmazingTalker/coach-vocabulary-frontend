@@ -459,28 +459,14 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* 狀態提示 */}
-          {nextAction && nextAction !== "tutorial" && (
+          {/* 狀態提示（僅 debug 模式顯示） */}
+          {DEBUG_MODE && nextAction && nextAction !== "tutorial" && (
             <Text style={styles.actionHint}>
               {nextAction === "analysis" && "請先完成程度分析以開啟學習任務"}
               {nextAction === "review" && `有 ${stats?.available_review} 個單字需要複習`}
               {nextAction === "practice" && `有 ${stats?.available_practice} 個單字可以練習`}
               {nextAction === "learn" && "開始學習新單字吧！"}
             </Text>
-          )}
-
-          {/* 次要按鈕 - 程度分析完成且教學未完成時顯示 */}
-          {stats?.current_level !== null && !isTutorialCompleted && (
-            <TouchableOpacity
-              style={styles.secondaryActionButton}
-              onPress={() => navigateToAction("tutorial")}
-              activeOpacity={0.8}
-            >
-              {getActionIcon("tutorial", true)}
-              <Text style={styles.secondaryActionButtonText}>
-                {getActionLabel("tutorial")}
-              </Text>
-            </TouchableOpacity>
           )}
 
           {/* Status Messages */}
@@ -777,24 +763,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.destructiveForeground,
     marginLeft: 8,
-  },
-  secondaryActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: "transparent",
-  },
-  secondaryActionButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 12,
-    color: colors.primary,
   },
   drawerBadge: {
     width: 24,
