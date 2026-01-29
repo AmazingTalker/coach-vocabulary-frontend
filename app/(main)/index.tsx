@@ -469,20 +469,6 @@ export default function HomeScreen() {
             </Text>
           )}
 
-          {/* 次要按鈕 - 程度分析完成且教學未完成時顯示 */}
-          {stats?.current_level !== null && !isTutorialCompleted && (
-            <TouchableOpacity
-              style={styles.secondaryActionButton}
-              onPress={() => navigateToAction("tutorial")}
-              activeOpacity={0.8}
-            >
-              {getActionIcon("tutorial", true)}
-              <Text style={styles.secondaryActionButtonText}>
-                {getActionLabel("tutorial")}
-              </Text>
-            </TouchableOpacity>
-          )}
-
           {/* Status Messages */}
           {!nextAction && (
             <View style={styles.statusMessageContainer}>
@@ -777,24 +763,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.destructiveForeground,
     marginLeft: 8,
-  },
-  secondaryActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: "transparent",
-  },
-  secondaryActionButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 12,
-    color: colors.primary,
   },
   drawerBadge: {
     width: 24,
