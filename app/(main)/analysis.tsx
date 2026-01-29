@@ -25,7 +25,7 @@ import { useCoachMark } from "../../hooks/useCoachMark";
 import { CoachMarkOverlay } from "../../components/ui/CoachMark";
 import type { CoachMarkStep } from "../../components/ui/CoachMark";
 
-type PagePhase = "loading" | "intro" | "q0" | "exercising" | "submitting";
+type PagePhase = "loading" | "intro" | "q0" | "pre-exercise" | "exercising" | "submitting";
 
 const Q0_OPTIONS = [
     { id: 1, text: "我沒有學過", sub: "從最基礎開始" },
@@ -206,8 +206,12 @@ export default function AnalysisScreen() {
         if (finished) {
             submitResult(level!);
         } else {
-            nextQuestion();
+            setPagePhase("pre-exercise");
         }
+    };
+
+    const handleStartExercises = () => {
+        nextQuestion();
     };
 
     const handleBack = () => {
@@ -291,6 +295,24 @@ export default function AnalysisScreen() {
                         ))}
                     </View>
                 </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (pagePhase === "pre-exercise") {
+        return (
+            <SafeAreaView style={styles.introContainer}>
+                <View style={styles.introIconContainer}>
+                    <Sparkles size={48} color={colors.primary} />
+                </View>
+                <Text style={styles.introTitle}>單字小測驗</Text>
+                <Text style={styles.introSubtitle}>
+                    接下來會出現幾道單字題，{"\n"}
+                    根據你的作答來判斷程度。
+                </Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={handleStartExercises}>
+                    <Text style={styles.primaryButtonText}>開始作答</Text>
+                </TouchableOpacity>
             </SafeAreaView>
         );
     }
