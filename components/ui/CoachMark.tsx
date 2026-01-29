@@ -228,7 +228,9 @@ export function CoachMarkOverlay({
               </Text>
             )}
             <TouchableOpacity style={styles.dismissButton} onPress={handleDismiss}>
-              <Text style={styles.dismissButtonText}>知道了</Text>
+              <Text style={styles.dismissButtonText}>
+                {currentStepIndex < totalSteps - 1 ? "下一步" : "知道了"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
