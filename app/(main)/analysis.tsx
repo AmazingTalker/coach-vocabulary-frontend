@@ -60,7 +60,7 @@ export default function AnalysisScreen() {
 
     // Coach mark 步驟定義
     const questionSteps: CoachMarkStep[] = [
-        { targetRef: wordRef, text: "這是要測試的英文單字" },
+        { targetRef: wordRef, text: "這是要測試的英文單字，請思考中文翻譯" },
         { targetRef: countdownRef, text: "倒數結束後會出現選項" },
     ];
     const optionsSteps: CoachMarkStep[] = [
@@ -405,7 +405,7 @@ export default function AnalysisScreen() {
                                     selectedIndex={exerciseFlow.selectedIndex}
                                     correctIndex={currentExercise.correct_index}
                                     showResult={true}
-                                    onSelect={() => {}}
+                                    onSelect={() => { }}
                                     disabled={true}
                                     layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
                                     showImage={currentExercise.type === "reading_lv1"}
