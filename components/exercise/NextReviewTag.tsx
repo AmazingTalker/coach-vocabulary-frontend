@@ -28,7 +28,7 @@ export function NextReviewTag({ nextReview, isCorrect }: NextReviewTagProps) {
   return (
     <View style={tagStyles.badge}>
       <Text style={tagStyles.text}>
-        下次練習：{label}
+        {label}後複習
       </Text>
     </View>
   );

@@ -39,6 +39,9 @@ export function useExerciseFlow(
   const pausedRemainingRef = useRef<number>(0);
   const pausedOnEndRef = useRef<(() => void) | null>(null);
   const currentOnEndRef = useRef<(() => void) | null>(null);
+  // result phase pause/resume 用：記錄 result timeout 的開始時間和暫停剩餘時間
+  const resultStartTimeRef = useRef<number>(0);
+  const pausedResultRemainingRef = useRef<number>(0);
   // delayQuestionCountdown 用：記錄延遲的倒數參數
   const pendingCountdownRef = useRef<{ duration: number; onEnd: () => void } | null>(null);
 
@@ -118,6 +121,7 @@ export function useExerciseFlow(
       // 如果 skipResultTimeout 為 true，不啟動自動完成計時器（用於需要等待 async 驗證的情況）
       if (!skipResultTimeout) {
         // console.log("[ExerciseFlow] Starting result timeout", { duration: finalConfig.resultDuration });
+        resultStartTimeRef.current = Date.now();
         resultTimeoutRef.current = setTimeout(() => {
           // console.log("[ExerciseFlow] Result timeout fired, calling onComplete");
           onCompleteRef.current?.();
@@ -242,12 +246,28 @@ export function useExerciseFlow(
     }
     pausedRemainingRef.current = remainingMs;
     pausedOnEndRef.current = currentOnEndRef.current;
+    // 暫停 result timeout（如有）
+    if (resultTimeoutRef.current) {
+      clearTimeout(resultTimeoutRef.current);
+      resultTimeoutRef.current = null;
+      const elapsed = Date.now() - resultStartTimeRef.current;
+      pausedResultRemainingRef.current = Math.max(0, finalConfig.resultDuration - elapsed);
+    }
     setIsPaused(true);
-  }, [remainingMs]);
+  }, [remainingMs, finalConfig.resultDuration]);
 
   // 恢復計時器（coach mark 教學用）
   const resume = useCallback(() => {
     setIsPaused(false);
+    // 恢復 result timeout（如有）
+    if (phase === "result" && pausedResultRemainingRef.current > 0) {
+      resultStartTimeRef.current = Date.now();
+      resultTimeoutRef.current = setTimeout(() => {
+        onCompleteRef.current?.();
+      }, pausedResultRemainingRef.current);
+      pausedResultRemainingRef.current = 0;
+      return;
+    }
     const savedOnEnd = pausedOnEndRef.current;
     const savedRemaining = pausedRemainingRef.current;
     if (savedOnEnd && savedRemaining > 0) {
@@ -257,7 +277,7 @@ export function useExerciseFlow(
       savedOnEnd();
     }
     pausedOnEndRef.current = null;
-  }, [startCountdown]);
+  }, [startCountdown, phase]);
 
   // 重置
   const reset = useCallback(() => {
@@ -272,6 +292,8 @@ export function useExerciseFlow(
     pausedOnEndRef.current = null;
     currentOnEndRef.current = null;
     pendingCountdownRef.current = null;
+    resultStartTimeRef.current = 0;
+    pausedResultRemainingRef.current = 0;
   }, [clearTimer]);
 
   // 取得回答時間（在進入 result 階段時已記錄）

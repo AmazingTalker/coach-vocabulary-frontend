@@ -61,8 +61,9 @@ export default function LearnScreen() {
   const exerciseWordRef = useRef<View>(null);
   const exerciseCountdownRef = useRef<View>(null);
   const exerciseOptionsRef = useRef<View>(null);
-  // 教學目標階段：display | question | options | null
-  const [coachMarkTarget, setCoachMarkTarget] = useState<"display" | "question" | "options" | null>(null);
+  const nextReviewRef = useRef<View>(null);
+  // 教學目標階段：display | question | options | result | null
+  const [coachMarkTarget, setCoachMarkTarget] = useState<"display" | "question" | "options" | "result" | null>(null);
   const [showCoachMark, setShowCoachMark] = useState(false);
   const isFirstWordRef = useRef(true);
   // display 計時器暫停用
@@ -81,6 +82,9 @@ export default function LearnScreen() {
   const optionsSteps: CoachMarkStep[] = [
     { targetRef: exerciseOptionsRef, text: "選出正確的中文翻譯" },
     { targetRef: exerciseCountdownRef, text: "注意作答時間" },
+  ];
+  const resultSteps: CoachMarkStep[] = [
+    { targetRef: nextReviewRef, text: "系統會自動安排下次複習時間" },
   ];
 
   const currentWord = session?.words[currentIndex];
@@ -167,10 +171,13 @@ export default function LearnScreen() {
     } else if (exerciseFlow.phase === "options" && coachMarkTarget === "options") {
       exerciseFlow.pause();
       setShowCoachMark(true);
+    } else if (exerciseFlow.phase === "result" && coachMarkTarget === "result") {
+      exerciseFlow.pause();
+      setShowCoachMark(true);
     }
   }, [exerciseFlow.phase, coachMarkTarget, coachMark.shouldShow]);
 
-  const handleCoachMarkComplete = useCallback(async (phase: "display" | "question" | "options") => {
+  const handleCoachMarkComplete = useCallback(async (phase: "display" | "question" | "options" | "result") => {
     setShowCoachMark(false);
     if (phase === "display") {
       // 播放延遲的音檔，等音檔播完後才開始倒數
@@ -200,8 +207,12 @@ export default function LearnScreen() {
     } else if (phase === "question") {
       setCoachMarkTarget("options");
       exerciseFlow.resume();
-    } else {
-      // options 步驟完成，教學結束
+    } else if (phase === "options") {
+      // options 步驟完成，等待 result 階段
+      setCoachMarkTarget("result");
+      exerciseFlow.resume();
+    } else if (phase === "result") {
+      // result 步驟完成，教學結束
       setCoachMarkTarget(null);
       isFirstWordRef.current = false;
       coachMark.markAsSeen();
@@ -427,6 +438,7 @@ export default function LearnScreen() {
             optionsRef={exerciseOptionsRef}
             countdownRef={exerciseCountdownRef}
             nextReview={currentExercise.next_review}
+            nextReviewRef={nextReviewRef}
           />
         )}
       </View>
@@ -451,6 +463,13 @@ export default function LearnScreen() {
           visible={true}
           steps={optionsSteps}
           onComplete={() => handleCoachMarkComplete("options")}
+        />
+      )}
+      {showCoachMark && coachMarkTarget === "result" && (
+        <CoachMarkOverlay
+          visible={true}
+          steps={resultSteps}
+          onComplete={() => handleCoachMarkComplete("result")}
         />
       )}
     </SafeAreaView>

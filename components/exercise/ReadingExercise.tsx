@@ -32,6 +32,8 @@ export interface ReadingExerciseProps {
   countdownRef?: RefObject<View | null>;
   /** 下次複習資訊（後端提供） */
   nextReview?: NextReviewSchema;
+  /** Coach mark 用：下次複習標籤 ref */
+  nextReviewRef?: RefObject<View | null>;
 }
 
 /**
@@ -53,6 +55,7 @@ export function ReadingExercise({
   optionsRef,
   countdownRef,
   nextReview,
+  nextReviewRef,
 }: ReadingExerciseProps) {
   const isGridLayout = exerciseType === "reading_lv1";
 
@@ -99,10 +102,12 @@ export function ReadingExercise({
             <Text style={styles.timeoutText}>時間到！</Text>
           )}
           {nextReview && (
-            <NextReviewTag
-              nextReview={nextReview}
-              isCorrect={selectedIndex !== null && selectedIndex !== -1 && selectedIndex === correctIndex}
-            />
+            <View ref={nextReviewRef} collapsable={false}>
+              <NextReviewTag
+                nextReview={nextReview}
+                isCorrect={selectedIndex !== null && selectedIndex !== -1 && selectedIndex === correctIndex}
+              />
+            </View>
           )}
           <ExerciseOptions
             options={options}
