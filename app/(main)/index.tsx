@@ -459,8 +459,8 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* 狀態提示 */}
-          {nextAction && nextAction !== "tutorial" && (
+          {/* 狀態提示（僅 debug 模式顯示） */}
+          {DEBUG_MODE && nextAction && nextAction !== "tutorial" && (
             <Text style={styles.actionHint}>
               {nextAction === "analysis" && "請先完成程度分析以開啟學習任務"}
               {nextAction === "review" && `有 ${stats?.available_review} 個單字需要複習`}
