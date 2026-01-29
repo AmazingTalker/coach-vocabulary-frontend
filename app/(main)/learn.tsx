@@ -23,14 +23,16 @@ import {
   ExerciseLoading,
   ExerciseComplete,
   ReadingExercise,
+  IntroScreen,
 } from "../../components/exercise";
+import { getExerciseTitle } from "../../utils/exerciseHelpers";
 import { useExerciseFlow } from "../../hooks/useExerciseFlow";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
 import { useCoachMark } from "../../hooks/useCoachMark";
 import { CoachMarkOverlay } from "../../components/ui/CoachMark";
 import type { CoachMarkStep } from "../../components/ui/CoachMark";
 
-type PagePhase = "loading" | "display" | "exercising" | "complete";
+type PagePhase = "loading" | "intro" | "display" | "exercising" | "complete";
 
 const DISPLAY_DURATION = 3000; // 展示階段 3 秒
 const COUNTDOWN_INTERVAL = 50; // 更新間隔 50ms
@@ -232,7 +234,7 @@ export default function LearnScreen() {
           return;
         }
         setSession(data);
-        setPagePhase("display");
+        setPagePhase("intro");
 
         // 追蹤練習開始
         sessionStartTimeRef.current = Date.now();
@@ -348,8 +350,23 @@ export default function LearnScreen() {
     ]);
   };
 
+  // 從 intro 畫面開始學習
+  const startFromIntro = useCallback(() => {
+    setPagePhase("display");
+  }, []);
+
   if (pagePhase === "loading") {
     return <ExerciseLoading />;
+  }
+
+  if (pagePhase === "intro") {
+    return (
+      <IntroScreen
+        title={getExerciseTitle("reading", "learn")}
+        subtitle="記住新單字的拼寫和翻譯"
+        onStart={startFromIntro}
+      />
+    );
   }
 
   if (pagePhase === "complete") {
