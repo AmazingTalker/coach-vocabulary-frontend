@@ -5,6 +5,7 @@ import { CountdownText } from "../ui/CountdownText";
 import { SpeakingResult } from "./SpeakingResult";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
 import { colors } from "../../lib/tw";
+import { DEBUG_MODE } from "../../lib/config";
 import { NextReviewTag } from "./NextReviewTag";
 import type { ExerciseType, NextReviewSchema } from "../../types/api";
 import type { ExercisePhase } from "../../hooks/useExerciseFlow";
@@ -135,7 +136,7 @@ export function SpeakingExercise({
               </View>
 
               {/* Real-time transcript */}
-              {interimTranscript && (
+              {DEBUG_MODE && interimTranscript && (
                 <View style={styles.transcriptBox}>
                   <Text style={styles.transcriptLabel}>辨識中：</Text>
                   <Text style={styles.transcriptText}>
