@@ -295,10 +295,11 @@ export default function PracticeScreen() {
       // 聽力題：播放延遲的音檔，等音檔播完後啟動倒數
       if (coachMarkAudioPendingRef.current && currentExercise?.type.startsWith("listening")) {
         coachMarkAudioPendingRef.current = false;
+        // 先切換 target 避免 await 期間 intercept effect 重新觸發 question 教學
+        setCoachMarkTarget("options");
         await speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
         trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
         // 聽力題使用 startQuestionCountdown 而非 resume
-        setCoachMarkTarget("options");
         exerciseFlow.startQuestionCountdown();
       } else {
         setCoachMarkTarget("options");
