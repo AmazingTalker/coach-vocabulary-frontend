@@ -7,6 +7,8 @@ import {
   useWindowDimensions,
   LayoutRectangle,
   Modal,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { colors } from "../../lib/tw";
 
@@ -67,10 +69,15 @@ export function CoachMarkOverlay({
 
     measureAttemptRef.current = 0;
 
+    // Android 的 measureInWindow 座標起點在 status bar 下方，
+    // 但 Modal(statusBarTranslucent) 的座標起點在螢幕最頂端，需補上 status bar 高度
+    const statusBarOffset =
+      Platform.OS === "android" ? StatusBar.currentHeight || 0 : 0;
+
     const measure = () => {
       currentStep.targetRef.current?.measureInWindow((x, y, width, height) => {
         if (width > 0 && height > 0) {
-          setTargetRect({ x, y, width, height });
+          setTargetRect({ x, y: y + statusBarOffset, width, height });
         } else if (measureAttemptRef.current < 10) {
           // 元素可能還沒 layout 完成，重試
           measureAttemptRef.current++;
