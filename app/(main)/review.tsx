@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import { Alert } from "../../components/ui/Alert";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { reviewService } from "../../services/reviewService";
-import { handleApiError, getAssetUrl } from "../../services/api";
+import { handleApiError, getAssetUrl, STORAGE_KEYS } from "../../services/api";
 import { trackingService } from "../../services/trackingService";
 import { notificationService } from "../../services/notificationService";
 import type { ReviewSessionResponse, AnswerSchema } from "../../types/api";
@@ -34,6 +34,9 @@ import {
   getExerciseTitle,
 } from "../../utils/exerciseHelpers";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
+import { useCoachMark } from "../../hooks/useCoachMark";
+import { CoachMarkOverlay } from "../../components/ui/CoachMark";
+import type { CoachMarkStep } from "../../components/ui/CoachMark";
 
 type PagePhase = "loading" | "intro" | "display" | "exercising" | "complete";
 
@@ -59,6 +62,19 @@ export default function ReviewScreen() {
   const displayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answersRef = useRef<AnswerSchema[]>([]);
   const sessionStartTimeRef = useRef<number>(Date.now());
+
+  // Coach mark 教學（display 階段 2 步驟）
+  const coachMark = useCoachMark(STORAGE_KEYS.COACH_MARK_REVIEW);
+  const displayContentRef = useRef<View>(null);
+  const displayCountdownRef = useRef<View>(null);
+  const [showCoachMark, setShowCoachMark] = useState(false);
+  const isFirstDisplayRef = useRef(true);
+  const displayPausedRemainingRef = useRef(0);
+
+  const displayCoachSteps: CoachMarkStep[] = [
+    { targetRef: displayContentRef, text: "先回想這個單字的意思" },
+    { targetRef: displayCountdownRef, text: "複習後會進入測驗" },
+  ];
 
   const words = session?.words || [];
   const exercises = session?.exercises || [];
@@ -179,6 +195,32 @@ export default function ReviewScreen() {
     },
   });
 
+  const handleCoachMarkComplete = useCallback(() => {
+    setShowCoachMark(false);
+    isFirstDisplayRef.current = false;
+    coachMark.markAsSeen();
+    // 播放延遲的音檔
+    if (currentWord) {
+      speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+      trackingService.audioPlayed("review", currentWord.id, "auto");
+    }
+    // 恢復 display 倒數
+    const remaining = displayPausedRemainingRef.current;
+    if (remaining > 0) {
+      const start = Date.now();
+      setDisplayRemainingMs(remaining);
+      displayTimerRef.current = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const r = Math.max(0, remaining - elapsed);
+        setDisplayRemainingMs(r);
+        if (r <= 0) {
+          clearDisplayTimer();
+          goToExercise();
+        }
+      }, COUNTDOWN_INTERVAL);
+    }
+  }, [coachMark, currentWord, speak]);
+
   // 載入複習 Session
   useEffect(() => {
     const loadSession = async () => {
@@ -233,10 +275,11 @@ export default function ReviewScreen() {
   // 展示階段：自動播放發音 + 3秒後自動進入答題
   useEffect(() => {
     if (pagePhase === "display" && currentWord) {
-      // 播放音檔
-      speak(currentWord.word, getAssetUrl(currentWord.audio_url));
-      // 追蹤：音檔播放
-      trackingService.audioPlayed("review", currentWord.id, "auto");
+      // Coach mark 教學時延遲播放音檔
+      if (!(coachMark.shouldShow && isFirstDisplayRef.current)) {
+        speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+        trackingService.audioPlayed("review", currentWord.id, "auto");
+      }
 
       // 重置倒數
       const start = Date.now();
@@ -257,6 +300,18 @@ export default function ReviewScreen() {
 
     return () => clearDisplayTimer();
   }, [pagePhase, currentIndex, currentWord, speak]);
+
+  // Coach mark：攔截第一次 display 階段
+  // 注意：必須在 display timer effect 之後宣告，確保計時器已啟動才能清除
+  useEffect(() => {
+    if (!coachMark.shouldShow || !isFirstDisplayRef.current) return;
+    if (pagePhase === "display" && currentWord && !showCoachMark) {
+      // 暫停 display 計時器
+      clearDisplayTimer();
+      displayPausedRemainingRef.current = displayRemainingMs;
+      setShowCoachMark(true);
+    }
+  }, [pagePhase, coachMark.shouldShow, currentWord, displayRemainingMs]);
 
   // 聽力題：在 question 階段播放音檔
   useEffect(() => {
@@ -432,20 +487,25 @@ export default function ReviewScreen() {
         {pagePhase === "display" && currentWord && (
           <View style={styles.displayContainer}>
             {/* 倒數計時 */}
-            <CountdownText remainingMs={displayRemainingMs} />
-            {currentWord.image_url && (
-              <Image
-                source={{ uri: getAssetUrl(currentWord.image_url) || undefined }}
-                style={styles.wordImage}
-                resizeMode="contain"
-              />
-            )}
-            <Text style={styles.wordText}>
-              {currentWord.word}
-            </Text>
-            <Text style={styles.translationText}>
-              {currentWord.translation}
-            </Text>
+            <View ref={displayCountdownRef} collapsable={false}>
+              <CountdownText remainingMs={displayRemainingMs} />
+            </View>
+
+            <View ref={displayContentRef} collapsable={false} style={{ alignItems: "center" }}>
+              {currentWord.image_url && (
+                <Image
+                  source={{ uri: getAssetUrl(currentWord.image_url) || undefined }}
+                  style={styles.wordImage}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={styles.wordText}>
+                {currentWord.word}
+              </Text>
+              <Text style={styles.translationText}>
+                {currentWord.translation}
+              </Text>
+            </View>
 
             <View style={styles.speakerContainer}>
               <Volume2
@@ -462,6 +522,15 @@ export default function ReviewScreen() {
         {/* 答題階段 - 使用組件化的練習 */}
         {pagePhase === "exercising" && renderExercise()}
       </View>
+
+      {/* Coach Mark 教學覆蓋層 */}
+      {showCoachMark && (
+        <CoachMarkOverlay
+          visible={true}
+          steps={displayCoachSteps}
+          onComplete={handleCoachMarkComplete}
+        />
+      )}
     </SafeAreaView>
   );
 }

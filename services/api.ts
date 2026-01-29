@@ -20,6 +20,13 @@ export const STORAGE_KEYS = {
   // Notification permission tracking
   NOTIFICATION_PERMISSION_DISMISSED_AT: "notificationPermissionDismissedAt",
   NOTIFICATION_PERMISSION_GRANTED: "notificationPermissionGranted",
+  // Coach mark tutorials
+  COACH_MARK_ANALYSIS: "coachMarkAnalysisSeen",
+  COACH_MARK_LEARN: "coachMarkLearnSeen",
+  COACH_MARK_PRACTICE_READING: "coachMarkPracticeReadingSeen",
+  COACH_MARK_PRACTICE_LISTENING: "coachMarkPracticeListeningSeen",
+  COACH_MARK_PRACTICE_SPEAKING: "coachMarkPracticeSpeakingSeen",
+  COACH_MARK_REVIEW: "coachMarkReviewSeen",
   // Tracking
   DEVICE_ID: "trackingDeviceId",
   SESSION_ID: "trackingSessionId",

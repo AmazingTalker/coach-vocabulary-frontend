@@ -28,12 +28,17 @@ export function useExerciseFlow(
   const [phase, setPhase] = useState<ExercisePhase>("idle");
   const [remainingMs, setRemainingMs] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onCompleteRef = useRef(onComplete);
   const optionsStartTimeRef = useRef<number | null>(null);
   const responseTimeMsRef = useRef<number | null>(null);
+  // pause/resume 用：記錄暫停時的剩餘時間和回調
+  const pausedRemainingRef = useRef<number>(0);
+  const pausedOnEndRef = useRef<(() => void) | null>(null);
+  const currentOnEndRef = useRef<(() => void) | null>(null);
 
   // 保持 onComplete 的最新參照
   useEffect(() => {
@@ -58,6 +63,9 @@ export function useExerciseFlow(
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+
+      // 記錄當前 onEnd 回調，供 pause/resume 使用
+      currentOnEndRef.current = onEnd;
 
       const start = Date.now();
       setRemainingMs(duration);
@@ -198,14 +206,43 @@ export function useExerciseFlow(
     }
   }, [phase]);
 
+  // 暫停計時器（coach mark 教學用）
+  const pause = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    pausedRemainingRef.current = remainingMs;
+    pausedOnEndRef.current = currentOnEndRef.current;
+    setIsPaused(true);
+  }, [remainingMs]);
+
+  // 恢復計時器（coach mark 教學用）
+  const resume = useCallback(() => {
+    setIsPaused(false);
+    const savedOnEnd = pausedOnEndRef.current;
+    const savedRemaining = pausedRemainingRef.current;
+    if (savedOnEnd && savedRemaining > 0) {
+      startCountdown(savedRemaining, savedOnEnd);
+    } else if (savedOnEnd) {
+      // 剩餘時間為 0，直接觸發 onEnd
+      savedOnEnd();
+    }
+    pausedOnEndRef.current = null;
+  }, [startCountdown]);
+
   // 重置
   const reset = useCallback(() => {
     clearTimer();
     setPhase("idle");
     setSelectedIndex(null);
     setRemainingMs(0);
+    setIsPaused(false);
     optionsStartTimeRef.current = null;
     responseTimeMsRef.current = null;
+    pausedRemainingRef.current = 0;
+    pausedOnEndRef.current = null;
+    currentOnEndRef.current = null;
   }, [clearTimer]);
 
   // 取得回答時間（在進入 result 階段時已記錄）
@@ -222,6 +259,7 @@ export function useExerciseFlow(
     phase,
     remainingMs,
     selectedIndex,
+    isPaused,
     start,
     startOptionsCountdown,
     select,
@@ -232,5 +270,7 @@ export function useExerciseFlow(
     enterResult,
     startResultTimeout,
     updateSelectedIndex,
+    pause,
+    resume,
   };
 }

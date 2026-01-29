@@ -12,7 +12,7 @@ import { Alert } from "../../components/ui/Alert";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { analysisService } from "../../services/analysisService";
-import { handleApiError } from "../../services/api";
+import { handleApiError, STORAGE_KEYS } from "../../services/api";
 import { trackingService } from "../../services/trackingService";
 import type { LevelAnalysisExerciseSchema } from "../../types/api";
 import { ArrowLeft, Sparkles } from "lucide-react-native";
@@ -21,6 +21,9 @@ import { LevelAnalysisLogic } from "../../utils/level-analysis-logic";
 import { CountdownText } from "../../components/ui/CountdownText";
 import { ExerciseOptions } from "../../components/exercise";
 import { useExerciseFlow } from "../../hooks/useExerciseFlow";
+import { useCoachMark } from "../../hooks/useCoachMark";
+import { CoachMarkOverlay } from "../../components/ui/CoachMark";
+import type { CoachMarkStep } from "../../components/ui/CoachMark";
 
 type PagePhase = "loading" | "intro" | "q0" | "exercising" | "submitting";
 
@@ -43,6 +46,27 @@ export default function AnalysisScreen() {
     const logicRef = useRef<LevelAnalysisLogic | null>(null);
     const sessionStartTimeRef = useRef<number>(Date.now());
     const answersRef = useRef<{ correct: boolean }[]>([]);
+
+    // Coach mark 教學
+    const coachMark = useCoachMark(STORAGE_KEYS.COACH_MARK_ANALYSIS);
+    const wordRef = useRef<View>(null);
+    const countdownRef = useRef<View>(null);
+    const optionsAreaRef = useRef<View>(null);
+    // 追蹤教學等待的階段：question | options | null（完成）
+    const [coachMarkTarget, setCoachMarkTarget] = useState<"question" | "options" | null>(null);
+    const [showCoachMark, setShowCoachMark] = useState(false);
+    // 記錄是否為第一題（Q0 之後的第一道適性題）
+    const isFirstExerciseRef = useRef(true);
+
+    // Coach mark 步驟定義
+    const questionSteps: CoachMarkStep[] = [
+        { targetRef: wordRef, text: "這是要測試的英文單字" },
+        { targetRef: countdownRef, text: "倒數結束後會出現選項" },
+    ];
+    const optionsSteps: CoachMarkStep[] = [
+        { targetRef: optionsAreaRef, text: "選出你認為正確的中文翻譯" },
+        { targetRef: countdownRef, text: "注意作答時間，倒數結束會自動跳下一題" },
+    ];
 
     // 進入下一題或完成
     const nextQuestion = useCallback(() => {
@@ -117,6 +141,41 @@ export default function AnalysisScreen() {
             nextQuestion();
         }
     });
+
+    // Coach mark：攔截第一題的 phase 轉換
+    useEffect(() => {
+        if (!coachMark.shouldShow || !isFirstExerciseRef.current) return;
+
+        if (exerciseFlow.phase === "question" && coachMarkTarget === "question") {
+            exerciseFlow.pause();
+            setShowCoachMark(true);
+        } else if (exerciseFlow.phase === "options" && coachMarkTarget === "options") {
+            exerciseFlow.pause();
+            setShowCoachMark(true);
+        }
+    }, [exerciseFlow.phase, coachMarkTarget, coachMark.shouldShow]);
+
+    // Coach mark：第一題開始時設定目標
+    useEffect(() => {
+        if (pagePhase === "exercising" && coachMark.shouldShow && isFirstExerciseRef.current && coachMarkTarget === null) {
+            setCoachMarkTarget("question");
+        }
+    }, [pagePhase, coachMark.shouldShow, coachMarkTarget]);
+
+    const handleCoachMarkComplete = useCallback((phase: "question" | "options") => {
+        setShowCoachMark(false);
+        if (phase === "question") {
+            // question 步驟完成，下一步等待 options
+            setCoachMarkTarget("options");
+            exerciseFlow.resume();
+        } else {
+            // options 步驟完成，教學結束
+            setCoachMarkTarget(null);
+            isFirstExerciseRef.current = false;
+            coachMark.markAsSeen();
+            exerciseFlow.resume();
+        }
+    }, [exerciseFlow, coachMark]);
 
     const loadData = useCallback(async () => {
         try {
@@ -280,10 +339,14 @@ export default function AnalysisScreen() {
                         {/* 題目階段：顯示單字，倒數計時 */}
                         {exerciseFlow.phase === "question" && (
                             <>
-                                <CountdownText remainingMs={exerciseFlow.remainingMs} />
-                                <Text style={styles.exerciseWordText}>
-                                    {currentExercise.word}
-                                </Text>
+                                <View ref={countdownRef} collapsable={false}>
+                                    <CountdownText remainingMs={exerciseFlow.remainingMs} />
+                                </View>
+                                <View ref={wordRef} collapsable={false}>
+                                    <Text style={styles.exerciseWordText}>
+                                        {currentExercise.word}
+                                    </Text>
+                                </View>
                                 <Text style={styles.exerciseHintText}>準備作答...</Text>
                             </>
                         )}
@@ -291,17 +354,21 @@ export default function AnalysisScreen() {
                         {/* 選項階段：顯示選項，倒數計時 */}
                         {exerciseFlow.phase === "options" && (
                             <>
-                                <CountdownText remainingMs={exerciseFlow.remainingMs} />
-                                <ExerciseOptions
-                                    options={currentExercise.options}
-                                    selectedIndex={null}
-                                    correctIndex={currentExercise.correct_index}
-                                    showResult={false}
-                                    onSelect={exerciseFlow.select}
-                                    disabled={false}
-                                    layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
-                                    showImage={currentExercise.type === "reading_lv1"}
-                                />
+                                <View ref={countdownRef} collapsable={false}>
+                                    <CountdownText remainingMs={exerciseFlow.remainingMs} />
+                                </View>
+                                <View ref={optionsAreaRef} collapsable={false} style={{ width: "100%" }}>
+                                    <ExerciseOptions
+                                        options={currentExercise.options}
+                                        selectedIndex={null}
+                                        correctIndex={currentExercise.correct_index}
+                                        showResult={false}
+                                        onSelect={exerciseFlow.select}
+                                        disabled={false}
+                                        layout={currentExercise.type === "reading_lv1" ? "grid" : "list"}
+                                        showImage={currentExercise.type === "reading_lv1"}
+                                    />
+                                </View>
                             </>
                         )}
 
@@ -326,6 +393,22 @@ export default function AnalysisScreen() {
                     </View>
                 )}
             </View>
+
+            {/* Coach Mark 教學覆蓋層 */}
+            {showCoachMark && coachMarkTarget === "question" && (
+                <CoachMarkOverlay
+                    visible={true}
+                    steps={questionSteps}
+                    onComplete={() => handleCoachMarkComplete("question")}
+                />
+            )}
+            {showCoachMark && coachMarkTarget === "options" && (
+                <CoachMarkOverlay
+                    visible={true}
+                    steps={optionsSteps}
+                    onComplete={() => handleCoachMarkComplete("options")}
+                />
+            )}
         </SafeAreaView>
     );
 }
