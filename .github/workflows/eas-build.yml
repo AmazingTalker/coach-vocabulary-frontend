@@ -29,7 +29,7 @@ jobs:
         run: npm ci
 
       - name: Build and Submit iOS to App Store
-        run: eas build --platform ios --profile production --non-interactive --no-wait
+        run: eas build --platform ios --profile production --non-interactive --no-wait --auto-submit
 
   build-and-submit-android:
     name: Build & Submit Android to Google Play

@@ -130,7 +130,7 @@ export function handleApiError(error: unknown): string {
       case 400:
         return data?.detail || "請求格式錯誤";
       case 401:
-        return "請重新登入";
+        return "帳號或密碼錯誤，請重新登入";
       case 403:
         return "沒有權限執行此操作";
       case 404:
