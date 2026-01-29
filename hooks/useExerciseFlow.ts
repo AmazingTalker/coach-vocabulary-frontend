@@ -39,6 +39,8 @@ export function useExerciseFlow(
   const pausedRemainingRef = useRef<number>(0);
   const pausedOnEndRef = useRef<(() => void) | null>(null);
   const currentOnEndRef = useRef<(() => void) | null>(null);
+  // delayQuestionCountdown 用：記錄延遲的倒數參數
+  const pendingCountdownRef = useRef<{ duration: number; onEnd: () => void } | null>(null);
 
   // 保持 onComplete 的最新參照
   useEffect(() => {
@@ -149,7 +151,14 @@ export function useExerciseFlow(
 
   // 開始答題（進入 question phase）
   // delayOptionsCountdown: 如果為 true，進入 options 階段時不自動開始倒數（用於口說題等待錄音準備好）
-  const start = useCallback((delayOptionsCountdown = false) => {
+  // delayQuestionCountdown: 如果為 true，進入 question 階段時不自動開始倒數（用於聽力題等待音檔播放完）
+  interface StartOptions {
+    delayOptionsCountdown?: boolean;
+    delayQuestionCountdown?: boolean;
+  }
+
+  const start = useCallback((options: StartOptions = {}) => {
+    const { delayOptionsCountdown = false, delayQuestionCountdown = false } = options;
     clearTimer();
     setSelectedIndex(null);
     setPhase("question");
@@ -157,7 +166,7 @@ export function useExerciseFlow(
     // 追蹤：題目顯示
     finalConfig.onQuestionShown?.();
 
-    startCountdown(finalConfig.questionDuration, () => {
+    const questionOnEnd = () => {
       setPhase("options");
       optionsStartTimeRef.current = Date.now();
 
@@ -171,7 +180,16 @@ export function useExerciseFlow(
           enterResult(-1);
         });
       }
-    });
+    };
+
+    if (delayQuestionCountdown) {
+      // 延遲模式：設定倒數時間但不啟動計時器，等外部呼叫 startQuestionCountdown()
+      setRemainingMs(finalConfig.questionDuration);
+      pendingCountdownRef.current = { duration: finalConfig.questionDuration, onEnd: questionOnEnd };
+      currentOnEndRef.current = questionOnEnd;
+    } else {
+      startCountdown(finalConfig.questionDuration, questionOnEnd);
+    }
   }, [finalConfig, startCountdown, clearTimer, enterResult]);
 
   // 手動開始 options 倒數（用於口說題錄音準備好後）
@@ -184,6 +202,16 @@ export function useExerciseFlow(
       }));
     }
   }, [phase, finalConfig.optionsDuration, startCountdown, enterResult]);
+
+  // 手動開始 question 倒數（用於聽力題音檔播放完後）
+  const startQuestionCountdown = useCallback(() => {
+    const pending = pendingCountdownRef.current;
+    if (pending) {
+      pendingCountdownRef.current = null;
+      setIsPaused(false);
+      startCountdown(pending.duration, pending.onEnd);
+    }
+  }, [startCountdown]);
 
   // 選擇選項
   const select = useCallback(
@@ -243,6 +271,7 @@ export function useExerciseFlow(
     pausedRemainingRef.current = 0;
     pausedOnEndRef.current = null;
     currentOnEndRef.current = null;
+    pendingCountdownRef.current = null;
   }, [clearTimer]);
 
   // 取得回答時間（在進入 result 階段時已記錄）
@@ -262,6 +291,7 @@ export function useExerciseFlow(
     isPaused,
     start,
     startOptionsCountdown,
+    startQuestionCountdown,
     select,
     reset,
     clearTimer,

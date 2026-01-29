@@ -195,13 +195,13 @@ export default function ReviewScreen() {
     },
   });
 
-  const handleCoachMarkComplete = useCallback(() => {
+  const handleCoachMarkComplete = useCallback(async () => {
     setShowCoachMark(false);
     isFirstDisplayRef.current = false;
     coachMark.markAsSeen();
-    // 播放延遲的音檔
+    // 播放延遲的音檔，等音檔播完後才開始倒數
     if (currentWord) {
-      speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+      await speak(currentWord.word, getAssetUrl(currentWord.audio_url));
       trackingService.audioPlayed("review", currentWord.id, "auto");
     }
     // 恢復 display 倒數
@@ -272,30 +272,41 @@ export default function ReviewScreen() {
     return () => clearDisplayTimer();
   }, [router]);
 
-  // 展示階段：自動播放發音 + 3秒後自動進入答題
+  // 展示階段：自動播放發音 + 音檔播完後 3秒進入答題
   useEffect(() => {
     if (pagePhase === "display" && currentWord) {
-      // Coach mark 教學時延遲播放音檔
-      if (!(coachMark.shouldShow && isFirstDisplayRef.current)) {
-        speak(currentWord.word, getAssetUrl(currentWord.audio_url));
-        trackingService.audioPlayed("review", currentWord.id, "auto");
-      }
-
-      // 重置倒數
-      const start = Date.now();
+      let cancelled = false;
       setDisplayRemainingMs(DISPLAY_DURATION);
 
-      // 設定倒數計時器
-      displayTimerRef.current = setInterval(() => {
-        const elapsed = Date.now() - start;
-        const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
-        setDisplayRemainingMs(remaining);
-
-        if (remaining <= 0) {
-          clearDisplayTimer();
-          goToExercise();
+      const startDisplay = async () => {
+        // Coach mark 教學時延遲播放音檔（會在 handleCoachMarkComplete 中播放）
+        if (!(coachMark.shouldShow && isFirstDisplayRef.current)) {
+          await speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+          trackingService.audioPlayed("review", currentWord.id, "auto");
         }
-      }, COUNTDOWN_INTERVAL);
+        if (cancelled) return;
+
+        // 音檔播完後開始倒數
+        const start = Date.now();
+        setDisplayRemainingMs(DISPLAY_DURATION);
+
+        displayTimerRef.current = setInterval(() => {
+          const elapsed = Date.now() - start;
+          const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
+          setDisplayRemainingMs(remaining);
+
+          if (remaining <= 0) {
+            clearDisplayTimer();
+            goToExercise();
+          }
+        }, COUNTDOWN_INTERVAL);
+      };
+      startDisplay();
+
+      return () => {
+        cancelled = true;
+        clearDisplayTimer();
+      };
     }
 
     return () => clearDisplayTimer();
@@ -313,7 +324,7 @@ export default function ReviewScreen() {
     }
   }, [pagePhase, coachMark.shouldShow, currentWord, displayRemainingMs]);
 
-  // 聽力題：在 question 階段播放音檔
+  // 聽力題：在 question 階段播放音檔，播完後啟動倒數
   useEffect(() => {
     if (
       pagePhase === "exercising" &&
@@ -321,9 +332,14 @@ export default function ReviewScreen() {
       currentExercise?.type.startsWith("listening") &&
       currentWord
     ) {
-      speak(currentWord.word, getAssetUrl(currentWord.audio_url));
-      // 追蹤：音檔播放
-      trackingService.audioPlayed("review", currentWord.id, "auto");
+      let cancelled = false;
+      const playAndStart = async () => {
+        await speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+        trackingService.audioPlayed("review", currentWord.id, "auto");
+        if (!cancelled) exerciseFlow.startQuestionCountdown();
+      };
+      playAndStart();
+      return () => { cancelled = true; };
     }
   }, [pagePhase, exerciseFlow.phase, currentExercise, currentWord, speak]);
 
@@ -335,9 +351,9 @@ export default function ReviewScreen() {
   // 進入答題階段
   const goToExercise = () => {
     setPagePhase("exercising");
-    // 口說題：延遲 options 倒數，等錄音準備好再開始
-    const isSpeakingExercise = currentExercise?.type.startsWith("speaking") ?? false;
-    exerciseFlow.start(isSpeakingExercise);
+    const isSpeaking = currentExercise?.type.startsWith("speaking") ?? false;
+    const isListening = currentExercise?.type.startsWith("listening") ?? false;
+    exerciseFlow.start({ delayOptionsCountdown: isSpeaking, delayQuestionCountdown: isListening });
   };
 
   // 完成複習

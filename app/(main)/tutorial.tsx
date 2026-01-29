@@ -248,31 +248,43 @@ export default function TutorialScreen() {
     return () => clearDisplayTimer();
   }, [router]);
 
-  // 教學展示階段：播放音檔 + 3秒倒數
+  // 教學展示階段：播放音檔 + 音檔播完後 3秒倒數
   useEffect(() => {
     if (pagePhase === "teaching" && word) {
-      speak(word.word, getAssetUrl(word.audio_url));
-      trackingService.audioPlayed("tutorial", word.id, "auto");
-
-      const start = Date.now();
+      let cancelled = false;
       setDisplayRemainingMs(DISPLAY_DURATION);
 
-      displayTimerRef.current = setInterval(() => {
-        const elapsed = Date.now() - start;
-        const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
-        setDisplayRemainingMs(remaining);
+      const startTeaching = async () => {
+        await speak(word.word, getAssetUrl(word.audio_url));
+        trackingService.audioPlayed("tutorial", word.id, "auto");
+        if (cancelled) return;
 
-        if (remaining <= 0) {
-          clearDisplayTimer();
-          goToNextStep();
-        }
-      }, COUNTDOWN_INTERVAL);
+        const start = Date.now();
+        setDisplayRemainingMs(DISPLAY_DURATION);
+
+        displayTimerRef.current = setInterval(() => {
+          const elapsed = Date.now() - start;
+          const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
+          setDisplayRemainingMs(remaining);
+
+          if (remaining <= 0) {
+            clearDisplayTimer();
+            goToNextStep();
+          }
+        }, COUNTDOWN_INTERVAL);
+      };
+      startTeaching();
+
+      return () => {
+        cancelled = true;
+        clearDisplayTimer();
+      };
     }
 
     return () => clearDisplayTimer();
   }, [pagePhase, word, speak]);
 
-  // 聽力題：在 question 階段播放音檔
+  // 聽力題：在 question 階段播放音檔，播完後啟動倒數
   useEffect(() => {
     if (
       pagePhase === "exercising" &&
@@ -280,8 +292,14 @@ export default function TutorialScreen() {
       currentStep?.type.startsWith("listening") &&
       word
     ) {
-      speak(word.word, getAssetUrl(word.audio_url));
-      trackingService.audioPlayed("tutorial", word.id, "auto");
+      let cancelled = false;
+      const playAndStart = async () => {
+        await speak(word.word, getAssetUrl(word.audio_url));
+        trackingService.audioPlayed("tutorial", word.id, "auto");
+        if (!cancelled) exerciseFlow.startQuestionCountdown();
+      };
+      playAndStart();
+      return () => { cancelled = true; };
     }
   }, [pagePhase, exerciseFlow.phase, currentStep, word, speak]);
 
@@ -295,8 +313,9 @@ export default function TutorialScreen() {
       // 進入練習階段並開始計時
       setPagePhase("exercising");
       exerciseFlow.reset();
-      const isSpeakingExercise = currentStep?.type.startsWith("speaking") ?? false;
-      exerciseFlow.start(isSpeakingExercise);
+      const isSpeaking = currentStep?.type.startsWith("speaking") ?? false;
+      const isListening = currentStep?.type.startsWith("listening") ?? false;
+      exerciseFlow.start({ delayOptionsCountdown: isSpeaking, delayQuestionCountdown: isListening });
     }
   };
 

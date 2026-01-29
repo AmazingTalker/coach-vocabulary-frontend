@@ -170,12 +170,12 @@ export default function LearnScreen() {
     }
   }, [exerciseFlow.phase, coachMarkTarget, coachMark.shouldShow]);
 
-  const handleCoachMarkComplete = useCallback((phase: "display" | "question" | "options") => {
+  const handleCoachMarkComplete = useCallback(async (phase: "display" | "question" | "options") => {
     setShowCoachMark(false);
     if (phase === "display") {
-      // 播放延遲的音檔
+      // 播放延遲的音檔，等音檔播完後才開始倒數
       if (currentWord) {
-        speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+        await speak(currentWord.word, getAssetUrl(currentWord.audio_url));
         trackingService.audioPlayed("learn", currentWord.id, "auto");
       }
       // display 步驟完成，恢復 display 計時器，等待 question
@@ -237,32 +237,42 @@ export default function LearnScreen() {
     return () => clearDisplayTimer();
   }, [router]);
 
-  // 展示階段：自動播放音檔 + 3秒後自動進入答題
+  // 展示階段：自動播放音檔 + 音檔播完後 3秒進入答題
   useEffect(() => {
     if (pagePhase === "display" && currentWord) {
-      // Coach mark 教學時延遲播放音檔
-      if (!(coachMark.shouldShow && isFirstWordRef.current)) {
-        speak(currentWord.word, getAssetUrl(currentWord.audio_url));
-        trackingService.audioPlayed("learn", currentWord.id, "auto");
-      }
-
-      // 重置倒數
-      const start = Date.now();
+      let cancelled = false;
       setDisplayRemainingMs(DISPLAY_DURATION);
 
-      // 設定倒數計時器
-      displayTimerRef.current = setInterval(() => {
-        const elapsed = Date.now() - start;
-        const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
-        setDisplayRemainingMs(remaining);
-
-        if (remaining <= 0) {
-          clearDisplayTimer();
-          // 進入答題流程
-          setPagePhase("exercising");
-          exerciseFlow.start();
+      const startDisplay = async () => {
+        // Coach mark 教學時延遲播放音檔（會在 handleCoachMarkComplete 中播放）
+        if (!(coachMark.shouldShow && isFirstWordRef.current)) {
+          await speak(currentWord.word, getAssetUrl(currentWord.audio_url));
+          trackingService.audioPlayed("learn", currentWord.id, "auto");
         }
-      }, COUNTDOWN_INTERVAL);
+        if (cancelled) return;
+
+        // 音檔播完後開始倒數
+        const start = Date.now();
+        setDisplayRemainingMs(DISPLAY_DURATION);
+
+        displayTimerRef.current = setInterval(() => {
+          const elapsed = Date.now() - start;
+          const remaining = Math.max(0, DISPLAY_DURATION - elapsed);
+          setDisplayRemainingMs(remaining);
+
+          if (remaining <= 0) {
+            clearDisplayTimer();
+            setPagePhase("exercising");
+            exerciseFlow.start();
+          }
+        }, COUNTDOWN_INTERVAL);
+      };
+      startDisplay();
+
+      return () => {
+        cancelled = true;
+        clearDisplayTimer();
+      };
     }
 
     return () => clearDisplayTimer();

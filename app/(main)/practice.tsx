@@ -164,9 +164,9 @@ export default function PracticeScreen() {
         setPagePhase("exercising");
         exerciseFlow.reset();
         // 需要在下一個 tick 啟動，讓 currentExercise 更新
-        // 口說題：延遲 options 倒數，等錄音準備好再開始
-        const isSpeakingExercise = nextExercise.type.startsWith("speaking");
-        setTimeout(() => exerciseFlow.start(isSpeakingExercise), 0);
+        const isSpeaking = nextExercise.type.startsWith("speaking");
+        const isListening = nextExercise.type.startsWith("listening");
+        setTimeout(() => exerciseFlow.start({ delayOptionsCountdown: isSpeaking, delayQuestionCountdown: isListening }), 0);
       }
     } else {
       completeSession();
@@ -283,17 +283,21 @@ export default function PracticeScreen() {
     }
   }, [exerciseFlow.phase, coachMarkTarget, getCurrentCoachMark]);
 
-  const handleCoachMarkComplete = useCallback((phase: "question" | "options") => {
+  const handleCoachMarkComplete = useCallback(async (phase: "question" | "options") => {
     setShowCoachMark(false);
     if (phase === "question") {
-      // 聽力題：播放延遲的音檔
+      // 聽力題：播放延遲的音檔，等音檔播完後啟動倒數
       if (coachMarkAudioPendingRef.current && currentExercise?.type.startsWith("listening")) {
         coachMarkAudioPendingRef.current = false;
-        speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
+        await speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
         trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
+        // 聽力題使用 startQuestionCountdown 而非 resume
+        setCoachMarkTarget("options");
+        exerciseFlow.startQuestionCountdown();
+      } else {
+        setCoachMarkTarget("options");
+        exerciseFlow.resume();
       }
-      setCoachMarkTarget("options");
-      exerciseFlow.resume();
     } else {
       setCoachMarkTarget(null);
       const cm = getCurrentCoachMark();
@@ -346,7 +350,7 @@ export default function PracticeScreen() {
     loadSession();
   }, [router]);
 
-  // 聽力題：在 question 階段播放音檔
+  // 聽力題：在 question 階段播放音檔，播完後啟動倒數
   useEffect(() => {
     if (
       pagePhase === "exercising" &&
@@ -355,18 +359,23 @@ export default function PracticeScreen() {
     ) {
       // Coach mark 教學時延遲播放音檔
       if (coachMarkAudioPendingRef.current) return;
-      speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
-      // 追蹤：音檔播放
-      trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
+      let cancelled = false;
+      const playAndStart = async () => {
+        await speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
+        trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
+        if (!cancelled) exerciseFlow.startQuestionCountdown();
+      };
+      playAndStart();
+      return () => { cancelled = true; };
     }
   }, [pagePhase, exerciseFlow.phase, currentExercise, speak]);
 
   // 開始練習（從 intro 進入）
   const startExercise = () => {
     setPagePhase("exercising");
-    // 口說題：延遲 options 倒數，等錄音準備好再開始
-    const isSpeakingExercise = currentExercise?.type.startsWith("speaking") ?? false;
-    exerciseFlow.start(isSpeakingExercise);
+    const isSpeaking = currentExercise?.type.startsWith("speaking") ?? false;
+    const isListening = currentExercise?.type.startsWith("listening") ?? false;
+    exerciseFlow.start({ delayOptionsCountdown: isSpeaking, delayQuestionCountdown: isListening });
   };
 
   // 完成練習
