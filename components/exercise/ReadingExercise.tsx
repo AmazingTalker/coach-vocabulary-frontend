@@ -1,8 +1,10 @@
 import { View, Text } from "react-native";
+import type { RefObject } from "react";
 import { CountdownText } from "../ui/CountdownText";
 import { ExerciseOptions } from "./ExerciseOptions";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
-import type { OptionSchema, ExerciseType } from "../../types/api";
+import { NextReviewTag } from "./NextReviewTag";
+import type { OptionSchema, ExerciseType, NextReviewSchema } from "../../types/api";
 import type { ExercisePhase } from "../../hooks/useExerciseFlow";
 
 export interface ReadingExerciseProps {
@@ -22,6 +24,16 @@ export interface ReadingExerciseProps {
   onSelect: (index: number) => void;
   /** The exercise type (reading_lv1, reading_lv2) */
   exerciseType: ExerciseType;
+  /** Coach mark 用：單字文字 ref */
+  wordRef?: RefObject<View | null>;
+  /** Coach mark 用：選項區域 ref */
+  optionsRef?: RefObject<View | null>;
+  /** Coach mark 用：倒數計時 ref */
+  countdownRef?: RefObject<View | null>;
+  /** 下次複習資訊（後端提供） */
+  nextReview?: NextReviewSchema;
+  /** Coach mark 用：下次複習標籤 ref */
+  nextReviewRef?: RefObject<View | null>;
 }
 
 /**
@@ -39,6 +51,11 @@ export function ReadingExercise({
   selectedIndex,
   onSelect,
   exerciseType,
+  wordRef,
+  optionsRef,
+  countdownRef,
+  nextReview,
+  nextReviewRef,
 }: ReadingExerciseProps) {
   const isGridLayout = exerciseType === "reading_lv1";
 
@@ -47,8 +64,12 @@ export function ReadingExercise({
       {/* Question phase */}
       {phase === "question" && (
         <>
-          <CountdownText remainingMs={remainingMs} />
-          <Text style={styles.readingWord}>{word}</Text>
+          <View ref={countdownRef} collapsable={false}>
+            <CountdownText remainingMs={remainingMs} />
+          </View>
+          <View ref={wordRef} collapsable={false}>
+            <Text style={styles.readingWord}>{word}</Text>
+          </View>
           <Text style={styles.readingInstruction}>準備作答...</Text>
         </>
       )}
@@ -56,17 +77,21 @@ export function ReadingExercise({
       {/* Options phase */}
       {phase === "options" && (
         <>
-          <CountdownText remainingMs={remainingMs} />
-          <ExerciseOptions
-            options={options}
-            selectedIndex={null}
-            correctIndex={correctIndex}
-            showResult={false}
-            onSelect={onSelect}
-            disabled={false}
-            layout={isGridLayout ? "grid" : "list"}
-            showImage={isGridLayout}
-          />
+          <View ref={countdownRef} collapsable={false}>
+            <CountdownText remainingMs={remainingMs} />
+          </View>
+          <View ref={optionsRef} collapsable={false} style={{ width: "100%" }}>
+            <ExerciseOptions
+              options={options}
+              selectedIndex={null}
+              correctIndex={correctIndex}
+              showResult={false}
+              onSelect={onSelect}
+              disabled={false}
+              layout={isGridLayout ? "grid" : "list"}
+              showImage={isGridLayout}
+            />
+          </View>
         </>
       )}
 
@@ -75,6 +100,14 @@ export function ReadingExercise({
         <>
           {selectedIndex === -1 && (
             <Text style={styles.timeoutText}>時間到！</Text>
+          )}
+          {nextReview && (
+            <View ref={nextReviewRef} collapsable={false}>
+              <NextReviewTag
+                nextReview={nextReview}
+                isCorrect={selectedIndex !== null && selectedIndex !== -1 && selectedIndex === correctIndex}
+              />
+            </View>
           )}
           <ExerciseOptions
             options={options}

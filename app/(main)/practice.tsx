@@ -7,7 +7,7 @@ import { Alert } from "../../components/ui/Alert";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { practiceService } from "../../services/practiceService";
-import { handleApiError, getAssetUrl } from "../../services/api";
+import { handleApiError, getAssetUrl, STORAGE_KEYS } from "../../services/api";
 import { trackingService } from "../../services/trackingService";
 import { notificationService } from "../../services/notificationService";
 import type { PracticeSessionResponse, AnswerSchema } from "../../types/api";
@@ -29,6 +29,9 @@ import {
   getExerciseTitle,
 } from "../../utils/exerciseHelpers";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
+import { useCoachMark } from "../../hooks/useCoachMark";
+import { CoachMarkOverlay } from "../../components/ui/CoachMark";
+import type { CoachMarkStep } from "../../components/ui/CoachMark";
 
 
 // 頁面階段：loading | intro | exercising | complete
@@ -36,9 +39,15 @@ type PagePhase = "loading" | "intro" | "exercising" | "complete";
 
 // Subtitle mapping for exercise types
 const EXERCISE_SUBTITLES: Record<string, string> = {
-  reading: "看單字，選出正確的翻譯",
-  listening: "聽發音，選出正確的翻譯",
-  speaking: "看翻譯，說出正確的單字",
+  reading: "",
+  listening: "",
+  speaking: "",
+};
+
+const EXERCISE_STEPS: Record<string, string[]> = {
+  reading: ["看英文單字，回想意思", "選出正確的翻譯或圖片"],
+  listening: ["聆聽單字發音，回想意思", "選出正確的翻譯或圖片"],
+  speaking: ["看中文翻譯或圖片，回想英文單字", "說出正確的英文單字"],
 };
 
 export default function PracticeScreen() {
@@ -64,6 +73,85 @@ export default function PracticeScreen() {
   const answersRef = useRef<AnswerSchema[]>([]);
   const sessionStartTimeRef = useRef<number>(Date.now());
 
+  // Coach mark 教學（三種題型各自獨立）
+  const coachMarkReading = useCoachMark(STORAGE_KEYS.COACH_MARK_PRACTICE_READING);
+  const coachMarkListening = useCoachMark(STORAGE_KEYS.COACH_MARK_PRACTICE_LISTENING);
+  const coachMarkSpeaking = useCoachMark(STORAGE_KEYS.COACH_MARK_PRACTICE_SPEAKING);
+
+  // 共用 refs（因為同一時間只有一種題型顯示）
+  const wordRef = useRef<View>(null);
+  const countdownRef = useRef<View>(null);
+  const optionsRef = useRef<View>(null);
+  const speakerRef = useRef<View>(null);
+  const translationRef = useRef<View>(null);
+  const micRef = useRef<View>(null);
+
+  const [coachMarkTarget, setCoachMarkTarget] = useState<"question" | "options" | null>(null);
+  const [showCoachMark, setShowCoachMark] = useState(false);
+  // 記錄已觸發過教學的題型類別
+  const coachMarkTriggeredRef = useRef<Set<string>>(new Set());
+  // 聽力題：教學時延遲播放音檔
+  const coachMarkAudioPendingRef = useRef(false);
+
+  // 判斷當前題型是否需要教學
+  const getCurrentCoachMark = useCallback(() => {
+    if (!currentExercise) return null;
+    const category = getExerciseCategory(currentExercise.type);
+    if (category === "reading" && coachMarkReading.shouldShow) return coachMarkReading;
+    if (category === "listening" && coachMarkListening.shouldShow) return coachMarkListening;
+    if (category === "speaking" && coachMarkSpeaking.shouldShow) return coachMarkSpeaking;
+    return null;
+  }, [currentExercise, coachMarkReading, coachMarkListening, coachMarkSpeaking]);
+
+  // 取得當前題型的教學步驟
+  const getQuestionSteps = useCallback((): CoachMarkStep[] => {
+    if (!currentExercise) return [];
+    const category = getExerciseCategory(currentExercise.type);
+    if (category === "reading") {
+      return [
+        { targetRef: wordRef, text: "回想這個單字的中文翻譯" },
+        { targetRef: countdownRef, text: "倒數結束後會出現選項" },
+      ];
+    }
+    if (category === "listening") {
+      return [
+        { targetRef: speakerRef, text: "仔細聽單字的發音，並回想他的中文翻譯" },
+        { targetRef: countdownRef, text: "倒數結束後會出現選項" },
+      ];
+    }
+    if (category === "speaking") {
+      return [
+        { targetRef: translationRef, text: "看這個中文翻譯，並回想他的發音" },
+        { targetRef: countdownRef, text: "倒數結束後請說出這個單字" },
+      ];
+    }
+    return [];
+  }, [currentExercise]);
+
+  const getOptionsSteps = useCallback((): CoachMarkStep[] => {
+    if (!currentExercise) return [];
+    const category = getExerciseCategory(currentExercise.type);
+    if (category === "reading") {
+      return [
+        { targetRef: optionsRef, text: "選出正確的中文翻譯" },
+        { targetRef: countdownRef, text: "注意作答時間，倒數結束會自動跳下一題" },
+      ];
+    }
+    if (category === "listening") {
+      return [
+        { targetRef: optionsRef, text: "聽完後選出正確的翻譯" },
+        { targetRef: countdownRef, text: "注意作答時間" },
+      ];
+    }
+    if (category === "speaking") {
+      return [
+        { targetRef: micRef, text: "麥克風會自動錄音，請說出英文單字" },
+        { targetRef: countdownRef, text: "注意作答時間" },
+      ];
+    }
+    return [];
+  }, [currentExercise]);
+
   // 進入下一題
   const goToNextExercise = useCallback(() => {
     // 清除上一題的語音辨識結果
@@ -82,9 +170,9 @@ export default function PracticeScreen() {
         setPagePhase("exercising");
         exerciseFlow.reset();
         // 需要在下一個 tick 啟動，讓 currentExercise 更新
-        // 口說題：延遲 options 倒數，等錄音準備好再開始
-        const isSpeakingExercise = nextExercise.type.startsWith("speaking");
-        setTimeout(() => exerciseFlow.start(isSpeakingExercise), 0);
+        const isSpeaking = nextExercise.type.startsWith("speaking");
+        const isListening = nextExercise.type.startsWith("listening");
+        setTimeout(() => exerciseFlow.start({ delayOptionsCountdown: isSpeaking, delayQuestionCountdown: isListening }), 0);
       }
     } else {
       completeSession();
@@ -172,6 +260,59 @@ export default function PracticeScreen() {
     },
   });
 
+  // Coach mark：偵測新題型第一次出現
+  useEffect(() => {
+    if (pagePhase !== "exercising" || !currentExercise) return;
+    const category = getExerciseCategory(currentExercise.type);
+    const cm = getCurrentCoachMark();
+    if (cm && !coachMarkTriggeredRef.current.has(category)) {
+      coachMarkTriggeredRef.current.add(category);
+      setCoachMarkTarget("question");
+      // 聽力題：延遲播放音檔，等教學結束再播
+      if (category === "listening") {
+        coachMarkAudioPendingRef.current = true;
+      }
+    }
+  }, [pagePhase, currentExercise, getCurrentCoachMark]);
+
+  // Coach mark：攔截 exerciseFlow phase 轉換
+  useEffect(() => {
+    const cm = getCurrentCoachMark();
+    if (!cm || coachMarkTarget === null) return;
+
+    if (exerciseFlow.phase === "question" && coachMarkTarget === "question") {
+      exerciseFlow.pause();
+      setShowCoachMark(true);
+    } else if (exerciseFlow.phase === "options" && coachMarkTarget === "options") {
+      exerciseFlow.pause();
+      setShowCoachMark(true);
+    }
+  }, [exerciseFlow.phase, coachMarkTarget, getCurrentCoachMark]);
+
+  const handleCoachMarkComplete = useCallback(async (phase: "question" | "options") => {
+    setShowCoachMark(false);
+    if (phase === "question") {
+      // 聽力題：播放延遲的音檔，等音檔播完後啟動倒數
+      if (coachMarkAudioPendingRef.current && currentExercise?.type.startsWith("listening")) {
+        coachMarkAudioPendingRef.current = false;
+        // 先切換 target 避免 await 期間 intercept effect 重新觸發 question 教學
+        setCoachMarkTarget("options");
+        await speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
+        trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
+        // 聽力題使用 startQuestionCountdown 而非 resume
+        exerciseFlow.startQuestionCountdown();
+      } else {
+        setCoachMarkTarget("options");
+        exerciseFlow.resume();
+      }
+    } else {
+      setCoachMarkTarget(null);
+      const cm = getCurrentCoachMark();
+      cm?.markAsSeen();
+      exerciseFlow.resume();
+    }
+  }, [exerciseFlow, getCurrentCoachMark, currentExercise, speak]);
+
   // 載入練習 Session
   useEffect(() => {
     const loadSession = async () => {
@@ -216,25 +357,32 @@ export default function PracticeScreen() {
     loadSession();
   }, [router]);
 
-  // 聽力題：在 question 階段播放音檔
+  // 聽力題：在 question 階段播放音檔，播完後啟動倒數
   useEffect(() => {
     if (
       pagePhase === "exercising" &&
       exerciseFlow.phase === "question" &&
       currentExercise?.type.startsWith("listening")
     ) {
-      speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
-      // 追蹤：音檔播放
-      trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
+      // Coach mark 教學時延遲播放音檔
+      if (coachMarkAudioPendingRef.current) return;
+      let cancelled = false;
+      const playAndStart = async () => {
+        await speak(currentExercise.word, getAssetUrl(currentExercise.audio_url));
+        trackingService.audioPlayed("practice", currentExercise.word_id, "auto");
+        if (!cancelled) exerciseFlow.startQuestionCountdown();
+      };
+      playAndStart();
+      return () => { cancelled = true; };
     }
   }, [pagePhase, exerciseFlow.phase, currentExercise, speak]);
 
   // 開始練習（從 intro 進入）
   const startExercise = () => {
     setPagePhase("exercising");
-    // 口說題：延遲 options 倒數，等錄音準備好再開始
-    const isSpeakingExercise = currentExercise?.type.startsWith("speaking") ?? false;
-    exerciseFlow.start(isSpeakingExercise);
+    const isSpeaking = currentExercise?.type.startsWith("speaking") ?? false;
+    const isListening = currentExercise?.type.startsWith("listening") ?? false;
+    exerciseFlow.start({ delayOptionsCountdown: isSpeaking, delayQuestionCountdown: isListening });
   };
 
   // 完成練習
@@ -295,6 +443,7 @@ export default function PracticeScreen() {
       <IntroScreen
         title={getExerciseTitle(currentExerciseType)}
         subtitle={EXERCISE_SUBTITLES[currentExerciseType] || ""}
+        steps={EXERCISE_STEPS[currentExerciseType]}
         onStart={startExercise}
       />
     );
@@ -317,6 +466,10 @@ export default function PracticeScreen() {
           selectedIndex={exerciseFlow.selectedIndex}
           onSelect={exerciseFlow.select}
           exerciseType={currentExercise.type}
+          wordRef={wordRef}
+          optionsRef={optionsRef}
+          countdownRef={countdownRef}
+          nextReview={currentExercise.next_review}
         />
       );
     }
@@ -332,6 +485,10 @@ export default function PracticeScreen() {
           onSelect={exerciseFlow.select}
           exerciseType={currentExercise.type}
           isSpeaking={isSpeaking}
+          speakerRef={speakerRef}
+          optionsRef={optionsRef}
+          countdownRef={countdownRef}
+          nextReview={currentExercise.next_review}
         />
       );
     }
@@ -352,6 +509,10 @@ export default function PracticeScreen() {
           isCorrect={speakingExercise.isCorrect}
           onStopRecording={speakingExercise.handleStopRecording}
           getAssetUrl={getAssetUrl}
+          translationRef={translationRef}
+          micRef={micRef}
+          countdownRef={countdownRef}
+          nextReview={currentExercise.next_review}
         />
       );
     }
@@ -380,6 +541,22 @@ export default function PracticeScreen() {
       <View style={[styles.contentContainer, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : null]}>
         {pagePhase === "exercising" && renderExercise()}
       </View>
+
+      {/* Coach Mark 教學覆蓋層 */}
+      {showCoachMark && coachMarkTarget === "question" && (
+        <CoachMarkOverlay
+          visible={true}
+          steps={getQuestionSteps()}
+          onComplete={() => handleCoachMarkComplete("question")}
+        />
+      )}
+      {showCoachMark && coachMarkTarget === "options" && (
+        <CoachMarkOverlay
+          visible={true}
+          steps={getOptionsSteps()}
+          onComplete={() => handleCoachMarkComplete("options")}
+        />
+      )}
     </SafeAreaView>
   );
 }

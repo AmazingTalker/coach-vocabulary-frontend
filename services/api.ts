@@ -8,7 +8,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 // Prod
 // const API_BASE_URL = "https://coach-vocab-api-prod-1068204580938.asia-east1.run.app";
 // Local
-// const API_BASE_URL = "http://192.168.0.214:8000";
+// const API_BASE_URL = "http://192.168.0.220:8000";
 
 // AsyncStorage Keys
 export const STORAGE_KEYS = {
@@ -20,6 +20,15 @@ export const STORAGE_KEYS = {
   // Notification permission tracking
   NOTIFICATION_PERMISSION_DISMISSED_AT: "notificationPermissionDismissedAt",
   NOTIFICATION_PERMISSION_GRANTED: "notificationPermissionGranted",
+  // Coach mark tutorials
+  COACH_MARK_ANALYSIS: "coachMarkAnalysisSeen",
+  COACH_MARK_LEARN: "coachMarkLearnSeen",
+  COACH_MARK_PRACTICE_READING: "coachMarkPracticeReadingSeen",
+  COACH_MARK_PRACTICE_LISTENING: "coachMarkPracticeListeningSeen",
+  COACH_MARK_PRACTICE_SPEAKING: "coachMarkPracticeSpeakingSeen",
+  COACH_MARK_REVIEW: "coachMarkReviewSeen",
+  // Onboarding
+  ONBOARDING_COMPLETED: "onboardingCompleted",
   // Tracking
   DEVICE_ID: "trackingDeviceId",
   SESSION_ID: "trackingSessionId",

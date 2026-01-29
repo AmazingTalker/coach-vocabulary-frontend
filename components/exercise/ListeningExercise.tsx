@@ -1,10 +1,12 @@
 import { View, Text } from "react-native";
+import type { RefObject } from "react";
 import { Volume2 } from "lucide-react-native";
 import { CountdownText } from "../ui/CountdownText";
 import { ExerciseOptions } from "./ExerciseOptions";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
 import { colors } from "../../lib/tw";
-import type { OptionSchema, ExerciseType } from "../../types/api";
+import { NextReviewTag } from "./NextReviewTag";
+import type { OptionSchema, ExerciseType, NextReviewSchema } from "../../types/api";
 import type { ExercisePhase } from "../../hooks/useExerciseFlow";
 
 export interface ListeningExerciseProps {
@@ -24,6 +26,14 @@ export interface ListeningExerciseProps {
   exerciseType: ExerciseType;
   /** Whether audio is currently playing */
   isSpeaking: boolean;
+  /** Coach mark 用：播放圖示 ref */
+  speakerRef?: RefObject<View | null>;
+  /** Coach mark 用：選項區域 ref */
+  optionsRef?: RefObject<View | null>;
+  /** Coach mark 用：倒數計時 ref */
+  countdownRef?: RefObject<View | null>;
+  /** 下次複習資訊（後端提供） */
+  nextReview?: NextReviewSchema;
 }
 
 /**
@@ -41,6 +51,10 @@ export function ListeningExercise({
   onSelect,
   exerciseType,
   isSpeaking,
+  speakerRef,
+  optionsRef,
+  countdownRef,
+  nextReview,
 }: ListeningExerciseProps) {
   const isGridLayout = exerciseType === "listening_lv1";
 
@@ -49,17 +63,21 @@ export function ListeningExercise({
       {/* Question phase - audio playback indicator */}
       {phase === "question" && (
         <>
-          <CountdownText remainingMs={remainingMs} />
-          <View style={styles.listeningContainer}>
-            <View style={styles.listeningButton}>
-              <Volume2
-                size={48}
-                color={isSpeaking ? colors.primary : colors.mutedForeground}
-              />
+          <View ref={countdownRef} collapsable={false}>
+            <CountdownText remainingMs={remainingMs} />
+          </View>
+          <View ref={speakerRef} collapsable={false}>
+            <View style={styles.listeningContainer}>
+              <View style={styles.listeningButton}>
+                <Volume2
+                  size={48}
+                  color={isSpeaking ? colors.primary : colors.mutedForeground}
+                />
+              </View>
+              <Text style={styles.listeningText}>
+                {isSpeaking ? "播放中..." : "準備作答..."}
+              </Text>
             </View>
-            <Text style={styles.listeningText}>
-              {isSpeaking ? "播放中..." : "準備作答..."}
-            </Text>
           </View>
         </>
       )}
@@ -67,17 +85,21 @@ export function ListeningExercise({
       {/* Options phase */}
       {phase === "options" && (
         <>
-          <CountdownText remainingMs={remainingMs} />
-          <ExerciseOptions
-            options={options}
-            selectedIndex={null}
-            correctIndex={correctIndex}
-            showResult={false}
-            onSelect={onSelect}
-            disabled={false}
-            layout={isGridLayout ? "grid" : "list"}
-            showImage={isGridLayout}
-          />
+          <View ref={countdownRef} collapsable={false}>
+            <CountdownText remainingMs={remainingMs} />
+          </View>
+          <View ref={optionsRef} collapsable={false} style={{ width: "100%" }}>
+            <ExerciseOptions
+              options={options}
+              selectedIndex={null}
+              correctIndex={correctIndex}
+              showResult={false}
+              onSelect={onSelect}
+              disabled={false}
+              layout={isGridLayout ? "grid" : "list"}
+              showImage={isGridLayout}
+            />
+          </View>
         </>
       )}
 
@@ -86,6 +108,12 @@ export function ListeningExercise({
         <>
           {selectedIndex === -1 && (
             <Text style={styles.timeoutText}>時間到！</Text>
+          )}
+          {nextReview && (
+            <NextReviewTag
+              nextReview={nextReview}
+              isCorrect={selectedIndex !== null && selectedIndex !== -1 && selectedIndex === correctIndex}
+            />
           )}
           <ExerciseOptions
             options={options}

@@ -17,7 +17,7 @@ import { homeService } from "../../services/homeService";
 import { adminService } from "../../services/adminService";
 import { handleApiError } from "../../services/api";
 import { trackingService } from "../../services/trackingService";
-import type { StatsResponse } from "../../types/api";
+import type { StatsResponse, TutorialItemType } from "../../types/api";
 import {
   BookOpen,
   Dumbbell,
@@ -43,6 +43,8 @@ import { PermissionModal } from "../../components/ui/PermissionModal";
 import { BottomSheet, BottomSheetItem } from "../../components/ui/BottomSheet";
 import { DeleteAccountModal } from "../../components/ui/DeleteAccountModal";
 import { refreshSignal } from "../../utils/refreshSignal";
+
+const DAILY_LEARN_LIMIT = 50;
 
 type ActionType = "review" | "practice" | "learn" | "tutorial" | null;
 type BottomSheetStage = "main" | "account";
@@ -183,22 +185,17 @@ export default function HomeScreen() {
   };
 
   // 檢查教學是否已完成
-  const isTutorialCompleted = !!user?.vocabulary_tutorial_completed_at;
+  const TUTORIAL_ITEM_TYPES: TutorialItemType[] = [
+    "learn", "reading_lv1", "reading_lv2", "listening_lv1", "speaking_lv1", "speaking_lv2",
+  ];
+  const isTutorialCompleted = user?.tutorial_completion
+    ? TUTORIAL_ITEM_TYPES.every((t) => user.tutorial_completion![t])
+    : !!user?.vocabulary_tutorial_completed_at;
 
-  // 決定主要按鈕的動作（優先順序：程度分析 > 教學 > 複習 > 練習 > 學習）
+  // 決定主要按鈕的動作（優先順序：程度分析 > 複習 > 練習 > 學習）
   const getNextAction = (): ActionType | "analysis" => {
     if (!stats) return null;
     if (stats.current_level === null) return "analysis";
-    if (!isTutorialCompleted) return "tutorial";
-    if (stats.can_review) return "review";
-    if (stats.can_practice) return "practice";
-    if (stats.can_learn) return "learn";
-    return null;
-  };
-
-  // 取得次要動作（教學為主要時的正常流程）
-  const getSecondaryAction = (): ActionType | null => {
-    if (!stats) return null;
     if (stats.can_review) return "review";
     if (stats.can_practice) return "practice";
     if (stats.can_learn) return "learn";
@@ -267,10 +264,6 @@ export default function HomeScreen() {
 
   const handleStartAction = () => {
     navigateToAction(getNextAction());
-  };
-
-  const handleSecondaryAction = () => {
-    navigateToAction(getSecondaryAction());
   };
 
   const handleResetCooldown = async () => {
@@ -411,21 +404,24 @@ export default function HomeScreen() {
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-              <Text style={styles.statLabel}>今日學習</Text>
+              <Text style={styles.statLabel}>我的等級</Text>
               <Text style={styles.statValueForeground}>
-                {stats?.today_learned || 0}
+                {stats?.current_level && stats?.current_category
+                  ? `${stats.current_level.order}.${stats.current_category.order}`
+                  : "—"}
               </Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statLabel}>可練習</Text>
+              <Text style={styles.statLabel}>今日單字</Text>
               <Text style={styles.statValuePrimary}>
-                {stats?.available_practice || 0}
+                {stats?.today_learned || 0}
+                <Text style={styles.statValueGoal}> / {DAILY_LEARN_LIMIT}</Text>
               </Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statLabel}>待複習</Text>
-              <Text style={styles.statValueWarning}>
-                {stats?.available_review || 0}
+              <Text style={styles.statLabel}>今日練習次數</Text>
+              <Text style={styles.statValueAccent}>
+                {stats?.today_completed || 0}
               </Text>
             </View>
           </View>
@@ -463,28 +459,14 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* 狀態提示 */}
-          {nextAction && nextAction !== "tutorial" && (
+          {/* 狀態提示（僅 debug 模式顯示） */}
+          {DEBUG_MODE && nextAction && nextAction !== "tutorial" && (
             <Text style={styles.actionHint}>
               {nextAction === "analysis" && "請先完成程度分析以開啟學習任務"}
               {nextAction === "review" && `有 ${stats?.available_review} 個單字需要複習`}
               {nextAction === "practice" && `有 ${stats?.available_practice} 個單字可以練習`}
               {nextAction === "learn" && "開始學習新單字吧！"}
             </Text>
-          )}
-
-          {/* 次要按鈕 - 當教學為主要時顯示正常流程 */}
-          {nextAction === "tutorial" && getSecondaryAction() && (
-            <TouchableOpacity
-              style={styles.secondaryActionButton}
-              onPress={handleSecondaryAction}
-              activeOpacity={0.8}
-            >
-              {getActionIcon(getSecondaryAction(), true)}
-              <Text style={styles.secondaryActionButtonText}>
-                {getActionLabel(getSecondaryAction())}
-              </Text>
-            </TouchableOpacity>
           )}
 
           {/* Status Messages */}
@@ -526,7 +508,7 @@ export default function HomeScreen() {
         visible={showMicModal}
         icon={<Mic size={40} color={colors.primary} />}
         title="開啟語音權限"
-        description="為了讓你練習口說發音，我們需要使用麥克風與語音辨識功能來聆聽並即時比對你說的單字是否正確。"
+        description="我們需要使用麥克風與語音辨識功能來聆聽並即時比對你說的單字是否正確。"
         benefit="這能幫助你更有效地練習英文口說！"
         onAllow={handleMicModalAllow}
         onDismiss={handleMicModalDismiss}
@@ -688,15 +670,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: colors.primary,
   },
-  statValueWarning: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: colors.warning,
-  },
-  statValueMuted: {
-    fontSize: 30,
-    fontWeight: "bold",
+  statValueGoal: {
+    fontSize: 16,
+    fontWeight: "normal",
     color: colors.mutedForeground,
+  },
+  statValueAccent: {
+    fontSize: 30,
+    fontWeight: "bold",
+    color: colors.accent,
   },
   nextAvailableContainer: {
     flexDirection: "row",
@@ -781,24 +763,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.destructiveForeground,
     marginLeft: 8,
-  },
-  secondaryActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: "transparent",
-  },
-  secondaryActionButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 12,
-    color: colors.primary,
   },
   drawerBadge: {
     width: 24,

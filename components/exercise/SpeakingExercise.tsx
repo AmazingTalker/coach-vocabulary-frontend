@@ -1,10 +1,12 @@
 import { View, Text, TouchableOpacity, Image, ActivityIndicator } from "react-native";
+import type { RefObject } from "react";
 import { Mic } from "lucide-react-native";
 import { CountdownText } from "../ui/CountdownText";
 import { SpeakingResult } from "./SpeakingResult";
 import { exerciseCommonStyles as styles } from "../../styles/exerciseStyles";
 import { colors } from "../../lib/tw";
-import type { ExerciseType } from "../../types/api";
+import { NextReviewTag } from "./NextReviewTag";
+import type { ExerciseType, NextReviewSchema } from "../../types/api";
 import type { ExercisePhase } from "../../hooks/useExerciseFlow";
 
 export interface SpeakingExerciseProps {
@@ -34,6 +36,14 @@ export interface SpeakingExerciseProps {
   onStopRecording: () => void;
   /** Asset URL getter function */
   getAssetUrl: (url: string | null) => string | null;
+  /** Coach mark 用：翻譯文字 ref */
+  translationRef?: RefObject<View | null>;
+  /** Coach mark 用：麥克風/錄音區域 ref */
+  micRef?: RefObject<View | null>;
+  /** Coach mark 用：倒數計時 ref */
+  countdownRef?: RefObject<View | null>;
+  /** 下次複習資訊（後端提供） */
+  nextReview?: NextReviewSchema;
 }
 
 /**
@@ -57,6 +67,10 @@ export function SpeakingExercise({
   isCorrect,
   onStopRecording,
   getAssetUrl,
+  translationRef,
+  micRef,
+  countdownRef,
+  nextReview,
 }: SpeakingExerciseProps) {
   const showImage = exerciseType === "speaking_lv1" && imageUrl;
 
@@ -65,7 +79,9 @@ export function SpeakingExercise({
       {/* Question phase */}
       {phase === "question" && (
         <>
-          <CountdownText remainingMs={remainingMs} />
+          <View ref={countdownRef} collapsable={false}>
+            <CountdownText remainingMs={remainingMs} />
+          </View>
           {showImage && (
             <Image
               source={{ uri: getAssetUrl(imageUrl) || undefined }}
@@ -73,7 +89,9 @@ export function SpeakingExercise({
               resizeMode="contain"
             />
           )}
-          <Text style={styles.speakingWord}>{translation}</Text>
+          <View ref={translationRef} collapsable={false}>
+            <Text style={styles.speakingWord}>{translation}</Text>
+          </View>
           <Text style={styles.speakingInstruction}>準備作答...</Text>
         </>
       )}
@@ -90,26 +108,30 @@ export function SpeakingExercise({
           ) : (
             // Recording - show countdown + recording UI
             <>
-              <CountdownText remainingMs={remainingMs} />
+              <View ref={countdownRef} collapsable={false}>
+                <CountdownText remainingMs={remainingMs} />
+              </View>
               {/* Recording indicator */}
-              <View style={styles.recordingContainer}>
-                <View
-                  style={[
-                    styles.micButton,
-                    isRecording && styles.micButtonActive,
-                  ]}
-                >
-                  <Mic
-                    size={48}
-                    color={isRecording ? colors.destructive : colors.primary}
-                  />
-                </View>
-                {isRecording && (
-                  <View style={styles.recordingIndicator}>
-                    <View style={styles.recordingDot} />
-                    <Text style={styles.recordingText}>錄音中...</Text>
+              <View ref={micRef} collapsable={false} style={{ width: "100%" }}>
+                <View style={styles.recordingContainer}>
+                  <View
+                    style={[
+                      styles.micButton,
+                      isRecording && styles.micButtonActive,
+                    ]}
+                  >
+                    <Mic
+                      size={48}
+                      color={isRecording ? colors.destructive : colors.primary}
+                    />
                   </View>
-                )}
+                  {isRecording && (
+                    <View style={styles.recordingIndicator}>
+                      <View style={styles.recordingDot} />
+                      <Text style={styles.recordingText}>錄音中...</Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
               {/* Real-time transcript */}
@@ -147,12 +169,20 @@ export function SpeakingExercise({
 
       {/* Result phase */}
       {phase === "result" && (
-        <SpeakingResult
-          isCorrect={isCorrect}
-          recognizedText={recognizedText}
-          correctAnswer={word}
-          isVerifying={false}
-        />
+        <>
+          {nextReview && (
+            <NextReviewTag
+              nextReview={nextReview}
+              isCorrect={isCorrect}
+            />
+          )}
+          <SpeakingResult
+            isCorrect={isCorrect}
+            recognizedText={recognizedText}
+            correctAnswer={word}
+            isVerifying={false}
+          />
+        </>
       )}
     </View>
   );

@@ -23,6 +23,7 @@ export interface UserInfo {
   email: string;
   username: string;
   vocabulary_tutorial_completed_at?: string | null;
+  tutorial_completion?: Record<TutorialItemType, boolean>;
 }
 
 export interface DeleteAccountRequest {
@@ -38,6 +39,7 @@ export interface DeleteAccountResponse {
 // === Home ===
 export interface StatsResponse {
   today_learned: number;
+  today_completed: number;
   available_practice: number;
   available_review: number;
   upcoming_24h: number;
@@ -87,11 +89,18 @@ export interface WordDetailSchema {
   audio_url: string | null;
 }
 
+export interface NextReviewSchema {
+  correct_wait_seconds: number;
+  correct_is_mastered: boolean;
+  incorrect_wait_seconds: number;
+}
+
 export interface ExerciseSchema {
   word_id: string;
   type: ExerciseType;
   options: OptionSchema[];
   correct_index: number | null;
+  next_review?: NextReviewSchema;
 }
 
 export interface ExerciseWithWordSchema extends ExerciseSchema {
@@ -273,6 +282,35 @@ export interface TutorialSessionResponse {
 
 export interface TutorialCompleteResponse {
   success: boolean;
+}
+
+// 教學項目類型
+export type TutorialItemType =
+  | "learn"
+  | "reading_lv1"
+  | "reading_lv2"
+  | "listening_lv1"
+  | "speaking_lv1"
+  | "speaking_lv2";
+
+// 教學項目（含完成狀態與練習資料）
+export interface TutorialItemSchema {
+  type: TutorialItemType;
+  completed: boolean;
+  completed_at: string | null;
+  step: TutorialStepSchema | null;
+}
+
+// 教學狀態回應
+export interface TutorialStatusResponse {
+  word: WordDetailSchema;
+  items: TutorialItemSchema[];
+}
+
+// 單項教學完成回應
+export interface TutorialItemCompleteResponse {
+  success: boolean;
+  completed_at: string;
 }
 
 // === Helpers ===

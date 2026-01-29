@@ -28,12 +28,22 @@ export function useExerciseFlow(
   const [phase, setPhase] = useState<ExercisePhase>("idle");
   const [remainingMs, setRemainingMs] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onCompleteRef = useRef(onComplete);
   const optionsStartTimeRef = useRef<number | null>(null);
   const responseTimeMsRef = useRef<number | null>(null);
+  // pause/resume 用：記錄暫停時的剩餘時間和回調
+  const pausedRemainingRef = useRef<number>(0);
+  const pausedOnEndRef = useRef<(() => void) | null>(null);
+  const currentOnEndRef = useRef<(() => void) | null>(null);
+  // result phase pause/resume 用：記錄 result timeout 的開始時間和暫停剩餘時間
+  const resultStartTimeRef = useRef<number>(0);
+  const pausedResultRemainingRef = useRef<number>(0);
+  // delayQuestionCountdown 用：記錄延遲的倒數參數
+  const pendingCountdownRef = useRef<{ duration: number; onEnd: () => void } | null>(null);
 
   // 保持 onComplete 的最新參照
   useEffect(() => {
@@ -58,6 +68,9 @@ export function useExerciseFlow(
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+
+      // 記錄當前 onEnd 回調，供 pause/resume 使用
+      currentOnEndRef.current = onEnd;
 
       const start = Date.now();
       setRemainingMs(duration);
@@ -108,6 +121,7 @@ export function useExerciseFlow(
       // 如果 skipResultTimeout 為 true，不啟動自動完成計時器（用於需要等待 async 驗證的情況）
       if (!skipResultTimeout) {
         // console.log("[ExerciseFlow] Starting result timeout", { duration: finalConfig.resultDuration });
+        resultStartTimeRef.current = Date.now();
         resultTimeoutRef.current = setTimeout(() => {
           // console.log("[ExerciseFlow] Result timeout fired, calling onComplete");
           onCompleteRef.current?.();
@@ -141,7 +155,14 @@ export function useExerciseFlow(
 
   // 開始答題（進入 question phase）
   // delayOptionsCountdown: 如果為 true，進入 options 階段時不自動開始倒數（用於口說題等待錄音準備好）
-  const start = useCallback((delayOptionsCountdown = false) => {
+  // delayQuestionCountdown: 如果為 true，進入 question 階段時不自動開始倒數（用於聽力題等待音檔播放完）
+  interface StartOptions {
+    delayOptionsCountdown?: boolean;
+    delayQuestionCountdown?: boolean;
+  }
+
+  const start = useCallback((options: StartOptions = {}) => {
+    const { delayOptionsCountdown = false, delayQuestionCountdown = false } = options;
     clearTimer();
     setSelectedIndex(null);
     setPhase("question");
@@ -149,7 +170,7 @@ export function useExerciseFlow(
     // 追蹤：題目顯示
     finalConfig.onQuestionShown?.();
 
-    startCountdown(finalConfig.questionDuration, () => {
+    const questionOnEnd = () => {
       setPhase("options");
       optionsStartTimeRef.current = Date.now();
 
@@ -163,7 +184,16 @@ export function useExerciseFlow(
           enterResult(-1);
         });
       }
-    });
+    };
+
+    if (delayQuestionCountdown) {
+      // 延遲模式：設定倒數時間但不啟動計時器，等外部呼叫 startQuestionCountdown()
+      setRemainingMs(finalConfig.questionDuration);
+      pendingCountdownRef.current = { duration: finalConfig.questionDuration, onEnd: questionOnEnd };
+      currentOnEndRef.current = questionOnEnd;
+    } else {
+      startCountdown(finalConfig.questionDuration, questionOnEnd);
+    }
   }, [finalConfig, startCountdown, clearTimer, enterResult]);
 
   // 手動開始 options 倒數（用於口說題錄音準備好後）
@@ -176,6 +206,16 @@ export function useExerciseFlow(
       }));
     }
   }, [phase, finalConfig.optionsDuration, startCountdown, enterResult]);
+
+  // 手動開始 question 倒數（用於聽力題音檔播放完後）
+  const startQuestionCountdown = useCallback(() => {
+    const pending = pendingCountdownRef.current;
+    if (pending) {
+      pendingCountdownRef.current = null;
+      setIsPaused(false);
+      startCountdown(pending.duration, pending.onEnd);
+    }
+  }, [startCountdown]);
 
   // 選擇選項
   const select = useCallback(
@@ -198,14 +238,62 @@ export function useExerciseFlow(
     }
   }, [phase]);
 
+  // 暫停計時器（coach mark 教學用）
+  const pause = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    pausedRemainingRef.current = remainingMs;
+    pausedOnEndRef.current = currentOnEndRef.current;
+    // 暫停 result timeout（如有）
+    if (resultTimeoutRef.current) {
+      clearTimeout(resultTimeoutRef.current);
+      resultTimeoutRef.current = null;
+      const elapsed = Date.now() - resultStartTimeRef.current;
+      pausedResultRemainingRef.current = Math.max(0, finalConfig.resultDuration - elapsed);
+    }
+    setIsPaused(true);
+  }, [remainingMs, finalConfig.resultDuration]);
+
+  // 恢復計時器（coach mark 教學用）
+  const resume = useCallback(() => {
+    setIsPaused(false);
+    // 恢復 result timeout（如有）
+    if (phase === "result" && pausedResultRemainingRef.current > 0) {
+      resultStartTimeRef.current = Date.now();
+      resultTimeoutRef.current = setTimeout(() => {
+        onCompleteRef.current?.();
+      }, pausedResultRemainingRef.current);
+      pausedResultRemainingRef.current = 0;
+      return;
+    }
+    const savedOnEnd = pausedOnEndRef.current;
+    const savedRemaining = pausedRemainingRef.current;
+    if (savedOnEnd && savedRemaining > 0) {
+      startCountdown(savedRemaining, savedOnEnd);
+    } else if (savedOnEnd) {
+      // 剩餘時間為 0，直接觸發 onEnd
+      savedOnEnd();
+    }
+    pausedOnEndRef.current = null;
+  }, [startCountdown, phase]);
+
   // 重置
   const reset = useCallback(() => {
     clearTimer();
     setPhase("idle");
     setSelectedIndex(null);
     setRemainingMs(0);
+    setIsPaused(false);
     optionsStartTimeRef.current = null;
     responseTimeMsRef.current = null;
+    pausedRemainingRef.current = 0;
+    pausedOnEndRef.current = null;
+    currentOnEndRef.current = null;
+    pendingCountdownRef.current = null;
+    resultStartTimeRef.current = 0;
+    pausedResultRemainingRef.current = 0;
   }, [clearTimer]);
 
   // 取得回答時間（在進入 result 階段時已記錄）
@@ -222,8 +310,10 @@ export function useExerciseFlow(
     phase,
     remainingMs,
     selectedIndex,
+    isPaused,
     start,
     startOptionsCountdown,
+    startQuestionCountdown,
     select,
     reset,
     clearTimer,
@@ -232,5 +322,7 @@ export function useExerciseFlow(
     enterResult,
     startResultTimeout,
     updateSelectedIndex,
+    pause,
+    resume,
   };
 }
