@@ -87,7 +87,7 @@ const TUTORIAL_INTRO_CONTENT: Record<string, IntroContent> = {
   teaching: {
     title: "教學",
     subtitle: "",
-    steps: ["您會看到看單字、圖片、中文翻譯", "請記住這個單字"],
+    steps: ["您會看到單字、圖片、中文翻譯", "請記住這個單字"],
     timeWarning: "",
   },
   reading_lv1: {

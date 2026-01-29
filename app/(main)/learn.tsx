@@ -79,7 +79,7 @@ export default function LearnScreen() {
     { text: "第一次記不住很正常，系統會安排複習來加深記憶，不要有壓力" },
   ];
   const questionSteps: CoachMarkStep[] = [
-    { targetRef: exerciseWordRef, text: "看到單字後，準備選出翻譯" },
+    { targetRef: exerciseWordRef, text: "看到單字後，請回想中文翻譯" },
     { targetRef: exerciseCountdownRef, text: "倒數結束後會出現選項" },
   ];
   const optionsSteps: CoachMarkStep[] = [
@@ -364,7 +364,7 @@ export default function LearnScreen() {
     return (
       <IntroScreen
         title={getExerciseTitle("reading", "learn")}
-        subtitle="記住新單字的拼寫和翻譯"
+        subtitle="記住新單字的拼寫，發音和翻譯"
         onStart={startFromIntro}
       />
     );
@@ -374,7 +374,7 @@ export default function LearnScreen() {
     return (
       <ExerciseComplete
         title="學習完成！"
-        subtitle={`你已學習 ${totalWords} 個新單字\n10 分鐘後可以開始練習`}
+        subtitle={`你已學習 ${totalWords} 個新單字`}
         onBack={() => router.replace("/(main)")}
       />
     );

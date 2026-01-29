@@ -508,7 +508,7 @@ export default function HomeScreen() {
         visible={showMicModal}
         icon={<Mic size={40} color={colors.primary} />}
         title="開啟語音權限"
-        description="為了讓你練習口說發音，我們需要使用麥克風與語音辨識功能來聆聽並即時比對你說的單字是否正確。"
+        description="我們需要使用麥克風與語音辨識功能來聆聽並即時比對你說的單字是否正確。"
         benefit="這能幫助你更有效地練習英文口說！"
         onAllow={handleMicModalAllow}
         onDismiss={handleMicModalDismiss}

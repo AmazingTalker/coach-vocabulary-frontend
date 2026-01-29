@@ -72,7 +72,7 @@ export default function ReviewScreen() {
   const displayPausedRemainingRef = useRef(0);
 
   const displayCoachSteps: CoachMarkStep[] = [
-    { targetRef: displayContentRef, text: "先回想這個單字的意思" },
+    { targetRef: displayContentRef, text: "先複習這個單字的意思和發音" },
     { targetRef: displayCountdownRef, text: "複習後會進入測驗" },
   ];
 
@@ -405,7 +405,7 @@ export default function ReviewScreen() {
     return (
       <ExerciseComplete
         title="複習完成！"
-        subtitle={`答對 ${correctCount} / ${totalWords} 題`}
+        subtitle=""
         onBack={() => router.replace("/(main)")}
       />
     );
@@ -415,7 +415,7 @@ export default function ReviewScreen() {
     return (
       <IntroScreen
         title={getExerciseTitle(currentExerciseType, "review")}
-        subtitle="先複習單字，再進行測驗"
+        subtitle="再學一次之前答錯的單字"
         onStart={startFromIntro}
       />
     );

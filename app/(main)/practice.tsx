@@ -39,9 +39,9 @@ type PagePhase = "loading" | "intro" | "exercising" | "complete";
 
 // Subtitle mapping for exercise types
 const EXERCISE_SUBTITLES: Record<string, string> = {
-  reading: "看單字，選出正確的翻譯",
-  listening: "聽發音，選出正確的翻譯",
-  speaking: "看翻譯，說出正確的單字",
+  reading: "",
+  listening: "",
+  speaking: "",
 };
 
 const EXERCISE_STEPS: Record<string, string[]> = {
@@ -109,20 +109,20 @@ export default function PracticeScreen() {
     const category = getExerciseCategory(currentExercise.type);
     if (category === "reading") {
       return [
-        { targetRef: wordRef, text: "看這個英文單字" },
+        { targetRef: wordRef, text: "回想這個單字的中文翻譯" },
         { targetRef: countdownRef, text: "倒數結束後會出現選項" },
       ];
     }
     if (category === "listening") {
       return [
-        { targetRef: speakerRef, text: "仔細聽單字的發音" },
+        { targetRef: speakerRef, text: "仔細聽單字的發音，並回想他的中文翻譯" },
         { targetRef: countdownRef, text: "倒數結束後會出現選項" },
       ];
     }
     if (category === "speaking") {
       return [
-        { targetRef: translationRef, text: "看這個中文翻譯" },
-        { targetRef: countdownRef, text: "倒數結束後會出現選項" },
+        { targetRef: translationRef, text: "看這個中文翻譯，並回想他的發音" },
+        { targetRef: countdownRef, text: "倒數結束後請說出這個單字" },
       ];
     }
     return [];
