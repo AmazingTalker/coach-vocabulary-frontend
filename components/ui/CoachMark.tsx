@@ -12,8 +12,8 @@ import { colors } from "../../lib/tw";
 
 /** 單步 coach mark 定義 */
 export interface CoachMarkStep {
-  /** 要高亮的目標元素 ref */
-  targetRef: React.RefObject<View | null>;
+  /** 要高亮的目標元素 ref（省略則不高亮，訊息置中顯示） */
+  targetRef?: React.RefObject<View | null>;
   /** 說明文字 */
   text: string;
 }

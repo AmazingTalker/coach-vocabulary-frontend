@@ -74,8 +74,9 @@ export default function LearnScreen() {
 
   // Coach mark 步驟
   const displaySteps: CoachMarkStep[] = [
-    { targetRef: displayContentRef, text: "記住這個單字、圖片和翻譯" },
+    { targetRef: displayContentRef, text: "記住這個單字的發音、圖片和翻譯" },
     { targetRef: displayCountdownRef, text: "時間到會自動進入練習" },
+    { text: "第一次記不住很正常，系統會安排複習來加深記憶，不要有壓力" },
   ];
   const questionSteps: CoachMarkStep[] = [
     { targetRef: exerciseWordRef, text: "看到單字後，準備選出翻譯" },
